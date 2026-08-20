@@ -272,6 +272,115 @@ class TestRunner(unittest.TestCase):
         self.assertEqual(ctrl.whites, [])
 
 
+class TestTiming(unittest.TestCase):
+    """A fade asked for over N seconds must take N seconds."""
+
+    class SlowController(FakeController):
+        def set_colour(self, red, green, blue, white=None):
+            time.sleep(0.02)          # a real send costs about this much
+            return super().set_colour(red, green, blue, white)
+
+    def test_a_slow_send_does_not_stretch_the_duration(self):
+        # Sleeping the full hold ON TOP of the send stretched a five second
+        # fade to nearly eight on real hardware.
+        ctrl   = self.SlowController()
+        runner = fx.EffectRunner(ctrl)
+        plan   = fx.plan_fade((0, 0, 0), (255, 0, 0), 1.0, fps=20)
+        started = time.time()
+        runner.start("fade", plan)
+        runner._thread.join(10)
+        elapsed = time.time() - started
+        self.assertTrue(runner.completed)
+        self.assertLess(elapsed, 1.4, f"took {elapsed:.2f}s for a 1.0s fade")
+        self.assertGreater(elapsed, 0.9)
+
+    def test_it_still_walks_every_step(self):
+        ctrl   = self.SlowController()
+        runner = fx.EffectRunner(ctrl)
+        plan   = fx.plan_fade((0, 0, 0), (255, 0, 0), 1.0, fps=10)
+        runner.start("fade", plan)
+        runner._thread.join(10)
+        self.assertEqual(len(ctrl.colours), len(plan))
+
+
+class TestFrameDropping(unittest.TestCase):
+    """A short sleep is not short. Inside the plugin host an Event.wait(0.05)
+    comes back after about 0.10, so walking a plan one step per sleep ran every
+    effect 15-20% long. Frames are dropped instead of time."""
+
+    class SlugController(FakeController):
+        def set_colour(self, red, green, blue, white=None):
+            time.sleep(0.09)              # far slower than the frame interval
+            return super().set_colour(red, green, blue, white)
+
+    def _run(self, duration=2.0, fps=20):
+        ctrl   = self.SlugController()
+        runner = fx.EffectRunner(ctrl)
+        plan   = fx.plan_fade((0, 0, 0), (255, 0, 0), duration, fps=fps)
+        started = time.time()
+        runner.start("fade", plan)
+        runner._thread.join(30)
+        return ctrl, runner, plan, time.time() - started
+
+    def test_a_slow_controller_costs_frames_not_time(self):
+        _ctrl, runner, _plan, elapsed = self._run()
+        self.assertTrue(runner.completed)
+        self.assertLess(elapsed, 2.5, f"a 2.0s fade took {elapsed:.2f}s")
+
+    def test_frames_really_are_dropped(self):
+        ctrl, _runner, plan, _elapsed = self._run()
+        self.assertLess(len(ctrl.colours), len(plan))
+
+    def test_it_still_lands_exactly_on_target(self):
+        # Dropping the LAST frame would leave the lights on a colour nobody
+        # asked for, and the next poll would report that as the truth.
+        ctrl, runner, _plan, _elapsed = self._run()
+        self.assertEqual(ctrl.colours[-1][:3], (255, 0, 0))
+        self.assertEqual(runner.last_step.rgb, (255, 0, 0))
+
+    def test_a_healthy_controller_drops_nothing(self):
+        ctrl   = FakeController()
+        runner = fx.EffectRunner(ctrl)
+        plan   = fx.plan_fade((0, 0, 0), (255, 0, 0), 1.0, fps=10)
+        runner.start("fade", plan)
+        runner._thread.join(10)
+        self.assertEqual(len(ctrl.colours), len(plan))
+
+    def test_long_holds_are_never_dropped(self):
+        # A flash has 0.4s holds — far above any timer slack, so every step
+        # must be shown or the flash loses beats.
+        ctrl   = self.SlugController()
+        runner = fx.EffectRunner(ctrl)
+        plan   = fx.plan_flash((255, 0, 0), times=3)
+        runner.start("flash", plan)
+        runner._thread.join(20)
+        self.assertEqual(len(ctrl.colours), len(plan))
+
+
+class TestStepCallback(unittest.TestCase):
+
+    def test_each_step_is_reported(self):
+        seen   = []
+        ctrl   = FakeController()
+        runner = fx.EffectRunner(ctrl)
+        plan   = fx.plan_fade((0, 0, 0), (255, 0, 0), 0.2, fps=10)
+        runner.start("fade", plan, on_step=seen.append)
+        runner._thread.join(5)
+        self.assertEqual(len(seen), len(plan))
+
+    def test_a_broken_callback_does_not_stop_the_effect(self):
+        def explode(step):
+            raise RuntimeError("callback is broken")
+
+        ctrl   = FakeController()
+        runner = fx.EffectRunner(ctrl, logger=_QuietLogger())
+        runner.start("fade", fx.plan_fade((0, 0, 0), (255, 0, 0), 0.2, fps=10),
+                     on_step=explode)
+        runner._thread.join(5)
+        self.assertTrue(runner.completed)
+        self.assertEqual(ctrl.colours[-1][:3], (255, 0, 0))
+
+
 class _QuietLogger(object):
     def warning(self, *a, **k):
         pass

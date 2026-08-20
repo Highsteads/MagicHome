@@ -42,6 +42,8 @@ DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
 DEFAULT_REDISCOVER    = 15          # minutes
 LOOP_TICK             = 1.0         # seconds
+EFFECT_PUBLISH_GAP    = 1.0         # seconds between state writes during an effect
+ADDRESS_RETRY_GAP     = 60          # seconds between sweeps hunting a missing controller
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +97,20 @@ def parse_palette(text):
             continue
         colours.append(rgb)
     return colours
+
+
+def describe_span(seconds):
+    """Say a duration in a unit that carries meaning.
+
+    A twelve second sunrise logged as "0 minute" is a number that means
+    nothing, and a number that means nothing reads as a measurement.
+    """
+    seconds = as_float(seconds, 0.0, 0.0)
+    if seconds < 90:
+        return f"{seconds:.0f} second"
+    if seconds < 5400:
+        return f"{seconds / 60.0:.0f} minute"
+    return f"{seconds / 3600.0:.1f} hour"
 
 
 def to_percent(byte_value):
@@ -268,13 +284,22 @@ class Plugin(indigo.PluginBase):
 
     # -- discovery ----------------------------------------------------------
 
-    def _refresh_discovery(self, timeout=3.0):
+    def _refresh_discovery(self, timeout=4.0):
+        """Sweep for controllers and MERGE the result into what we know.
+
+        Deliberately a merge and not a replacement. UDP broadcast is lossy, so
+        a sweep can come back empty while every controller is sitting there
+        perfectly happy — and overwriting the cache with that would turn one
+        lost frame into a houseful of devices with no address. An empty sweep
+        means "nothing answered this time", never "there is nothing there".
+        """
         try:
             found = mdev.discover(timeout=timeout)
         except Exception:
             self.logger.exception("Controller discovery failed")
             return []
-        self.store["discovered"] = {proto.normalise_mac(entry.mac): entry for entry in found}
+        for entry in found:
+            self.store["discovered"][proto.normalise_mac(entry.mac)] = entry
         self.store["last_discovery"] = self._now()
         return found
 
@@ -329,6 +354,32 @@ class Plugin(indigo.PluginBase):
         except self.StopThread:
             pass
 
+    def _try_to_find_address(self, dev, controller):
+        """Look again for a controller we have never managed to place."""
+        props = dev.pluginProps
+        if props.get("addressMode", "discover") != "discover":
+            return False
+        mac = proto.normalise_mac(props.get("mac", ""))
+        if not mac:
+            return False
+
+        entry = self.store["discovered"].get(mac)
+        if entry is None:
+            if self._now() - self.store["last_discovery"] < ADDRESS_RETRY_GAP:
+                return False
+            self._refresh_discovery()
+            entry = self.store["discovered"].get(mac)
+        if entry is None or not entry.ip:
+            return False
+
+        controller.ip = entry.ip
+        controller.failures = 0
+        controller._retry_after = 0.0
+        self.logger.info(f"\"{dev.name}\" found at {entry.ip}")
+        dev.updateStateOnServer("controllerAddress", entry.ip)
+        dev.setErrorStateOnServer("")
+        return True
+
     def _rediscover_and_repoint(self):
         """Catch a controller that DHCP has moved."""
         before = {mac: entry.ip for mac, entry in self.store["discovered"].items()}
@@ -358,8 +409,15 @@ class Plugin(indigo.PluginBase):
 
     def _poll_device(self, dev, force=False):
         controller = self.store["controllers"].get(dev.id)
-        if controller is None or not controller.ip:
+        if controller is None:
             return
+        if not controller.ip:
+            # Keep looking. A controller that did not answer the sweep at
+            # startup was previously dead until the next re-check fifteen
+            # minutes later, or until somebody noticed and edited the device.
+            if not self._try_to_find_address(dev, controller):
+                self.store["next_poll"][dev.id] = self._now() + self.poll_interval
+                return
         state = controller.read_state(force=force)
         self.store["next_poll"][dev.id] = self._now() + self.poll_interval
         self._publish(dev, state, controller)
@@ -457,16 +515,52 @@ class Plugin(indigo.PluginBase):
             self.logger.error(f"\"{dev.name}\" has no address — cannot start {name}")
             return False
 
+        # While an effect runs the plugin knows exactly what it is showing, so
+        # it says so rather than leaving the device stale until the next poll.
+        # Throttled, because a fade sends twenty steps a second and writing all
+        # of them to the server would be twenty state writes a second for a
+        # number nobody can read that fast.
+        last_published = [0.0]
+
+        def stepped(step):
+            now = self._now()
+            if now - last_published[0] < EFFECT_PUBLISH_GAP:
+                return
+            last_published[0] = now
+            self._publish_step(dev, step)
+
         def finished(completed):
             try:
+                # Publish the LAST frame straight away, throttle or no
+                # throttle. Without this the device sits showing a colour from
+                # part way through the fade until the next poll corrects it —
+                # measured at up to a couple of seconds of a reading that is
+                # simply wrong rather than merely old.
+                final = runner.last_step
+                if final is not None:
+                    self._publish_step(dev, final)
                 dev.updateStateOnServer("effect", "none")
-                self.store["next_poll"][dev.id] = 0.0
+                self.store["next_poll"][dev.id] = 0.0     # re-read on the next tick
             except Exception:
-                pass
+                self.logger.exception(f"Tidying up after {name} on \"{dev.name}\" failed")
 
-        runner.start(name, steps, on_finish=finished)
+        runner.start(name, steps, on_finish=finished, on_step=stepped)
         dev.updateStateOnServer("effect", name)
         return True
+
+    def _publish_step(self, dev, step):
+        """Write what an effect is currently showing onto the device."""
+        updates = []
+        if step.rgb is not None:
+            updates += [{"key": "redLevel",        "value": to_percent(step.rgb[0])},
+                        {"key": "greenLevel",      "value": to_percent(step.rgb[1])},
+                        {"key": "blueLevel",       "value": to_percent(step.rgb[2])},
+                        {"key": "brightnessLevel", "value": to_percent(max(step.rgb))}]
+        if step.white is not None:
+            updates += [{"key": "whiteLevel",      "value": to_percent(step.white)},
+                        {"key": "brightnessLevel", "value": to_percent(step.white)}]
+        if updates:
+            dev.updateStatesOnServer(updates)
 
     def _current_rgb(self, dev):
         controller = self.store["controllers"].get(dev.id)
@@ -740,7 +834,7 @@ class Plugin(indigo.PluginBase):
         plan = fx.plan_sunrise(duration, fps=self.effect_fps,
                                peak_white=255 if finish_white else None)
         if self._start_effect(dev, "sunrise", plan):
-            self.logger.info(f"\"{dev.name}\" starting a {duration / 60.0:.0f} minute sunrise")
+            self.logger.info(f"\"{dev.name}\" starting a {describe_span(duration)} sunrise")
 
     def action_flash(self, action, dev):
         if self._controller(dev) is None:

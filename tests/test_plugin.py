@@ -141,6 +141,22 @@ class TestCoercion(unittest.TestCase):
             self.assertLessEqual(abs(plug.to_percent(plug.to_byte(percent)) - percent), 1)
 
 
+class TestDurationWording(unittest.TestCase):
+
+    def test_short_spans_are_said_in_seconds(self):
+        # "0 minute" is a number that means nothing.
+        self.assertEqual(plug.describe_span(12), "12 second")
+
+    def test_medium_spans_are_said_in_minutes(self):
+        self.assertEqual(plug.describe_span(900), "15 minute")
+
+    def test_long_spans_are_said_in_hours(self):
+        self.assertEqual(plug.describe_span(7200), "2.0 hour")
+
+    def test_rubbish_does_not_raise(self):
+        self.assertEqual(plug.describe_span(None), "0 second")
+
+
 class TestPaletteParsing(unittest.TestCase):
 
     def test_a_normal_palette(self):
@@ -323,6 +339,127 @@ class TestActions(unittest.TestCase):
     def test_an_action_on_an_unstarted_device_does_not_raise(self):
         p, dev = make_plugin(), FakeDevice(dev_id=99)
         p.action_warm_white(FakeAction(props={"level": "50"}), dev)
+
+
+class TestDiscoveryCache(unittest.TestCase):
+    """UDP broadcast is lossy, so a sweep can come back empty while every
+    controller is sitting there perfectly happy."""
+
+    def _plugin_with(self, sweeps):
+        p = make_plugin()
+        calls = {"n": 0}
+
+        def fake_discover(timeout=4.0, **kwargs):
+            result = sweeps[min(calls["n"], len(sweeps) - 1)]
+            calls["n"] += 1
+            return result
+
+        plug.mdev.discover = fake_discover
+        return p
+
+    def setUp(self):
+        self._real_discover = plug.mdev.discover
+
+    def tearDown(self):
+        plug.mdev.discover = self._real_discover
+
+    def test_an_empty_sweep_does_not_erase_what_we_knew(self):
+        # Overwriting the cache with an empty sweep turns one lost frame into
+        # a houseful of devices with no address.
+        entry = proto.Discovered(ip="192.168.1.9", mac="AABBCCDDEEFF",
+                                 hardware_id="AK001", name="DDEEFF")
+        p = self._plugin_with([[entry], []])
+        p._refresh_discovery()
+        self.assertEqual(len(p.store["discovered"]), 1)
+        p._refresh_discovery()
+        self.assertEqual(len(p.store["discovered"]), 1, "an empty sweep wiped the cache")
+
+    def test_a_moved_controller_replaces_its_old_address(self):
+        old = proto.Discovered(ip="192.168.1.9", mac="AABBCCDDEEFF",
+                               hardware_id="AK001", name="DDEEFF")
+        new = proto.Discovered(ip="192.168.1.44", mac="AABBCCDDEEFF",
+                               hardware_id="AK001", name="DDEEFF")
+        p = self._plugin_with([[old], [new]])
+        p._refresh_discovery()
+        p._refresh_discovery()
+        self.assertEqual(p.store["discovered"]["AABBCCDDEEFF"].ip, "192.168.1.44")
+
+    def test_a_failing_sweep_does_not_raise(self):
+        def explode(**kwargs):
+            raise OSError("network is down")
+        plug.mdev.discover = explode
+        p = make_plugin()
+        self.assertEqual(p._refresh_discovery(), [])
+
+
+class TestAddressRecovery(unittest.TestCase):
+    """A controller that missed the sweep at startup must not stay dead."""
+
+    def setUp(self):
+        self._real_discover = plug.mdev.discover
+
+    def tearDown(self):
+        plug.mdev.discover = self._real_discover
+
+    def test_a_device_with_no_address_is_looked_for_again(self):
+        dev  = FakeDevice(props={"addressMode": "discover", "mac": "AABBCCDDEEFF"})
+        p    = make_plugin()
+        ctrl = wire(p, dev, controller=FakeController(ip=""))
+        entry = proto.Discovered(ip="192.168.1.9", mac="AABBCCDDEEFF",
+                                 hardware_id="AK001", name="DDEEFF")
+        plug.mdev.discover = lambda **kw: [entry]
+
+        self.assertTrue(p._try_to_find_address(dev, ctrl))
+        self.assertEqual(ctrl.ip, "192.168.1.9")
+        self.assertEqual(dev.states["controllerAddress"], "192.168.1.9")
+        self.assertEqual(dev.errorState, "")
+
+    def test_it_gives_up_quietly_when_the_controller_is_genuinely_absent(self):
+        dev  = FakeDevice(props={"addressMode": "discover", "mac": "AABBCCDDEEFF"})
+        p    = make_plugin()
+        ctrl = wire(p, dev, controller=FakeController(ip=""))
+        plug.mdev.discover = lambda **kw: []
+        self.assertFalse(p._try_to_find_address(dev, ctrl))
+        self.assertEqual(ctrl.ip, "")
+
+    def test_a_fixed_ip_device_is_not_hunted_for(self):
+        dev  = FakeDevice(props={"addressMode": "manual", "ipAddress": ""})
+        p    = make_plugin()
+        ctrl = wire(p, dev, controller=FakeController(ip=""))
+        called = []
+        plug.mdev.discover = lambda **kw: called.append(1) or []
+        self.assertFalse(p._try_to_find_address(dev, ctrl))
+        self.assertEqual(called, [])
+
+    def test_sweeps_are_rate_limited_so_it_does_not_broadcast_every_poll(self):
+        dev  = FakeDevice(props={"addressMode": "discover", "mac": "AABBCCDDEEFF"})
+        p    = make_plugin()
+        ctrl = wire(p, dev, controller=FakeController(ip=""))
+        sweeps = []
+        plug.mdev.discover = lambda **kw: sweeps.append(1) or []
+        p.store["last_discovery"] = p._now()      # just swept
+        p._try_to_find_address(dev, ctrl)
+        self.assertEqual(sweeps, [], "swept again immediately")
+
+
+class TestEffectPublishing(unittest.TestCase):
+
+    def test_a_step_is_written_onto_the_device(self):
+        import magichome_effects as fx
+        p, dev = make_plugin(), FakeDevice()
+        wire(p, dev)
+        p._publish_step(dev, fx.Step(rgb=(255, 140, 60), white=None, hold=0))
+        self.assertEqual(dev.states["redLevel"], 100)
+        self.assertEqual(dev.states["greenLevel"], 55)
+        self.assertEqual(dev.states["blueLevel"], 24)
+
+    def test_a_white_step_is_written_onto_the_device(self):
+        import magichome_effects as fx
+        p, dev = make_plugin(), FakeDevice()
+        wire(p, dev)
+        p._publish_step(dev, fx.Step(rgb=None, white=255, hold=0))
+        self.assertEqual(dev.states["whiteLevel"], 100)
+        self.assertEqual(dev.states["brightnessLevel"], 100)
 
 
 class TestPrefs(unittest.TestCase):

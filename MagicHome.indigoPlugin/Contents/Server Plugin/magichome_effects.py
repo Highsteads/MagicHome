@@ -218,19 +218,21 @@ class EffectRunner(object):
         self._lock              = threading.RLock()
         self.last_step          = None
         self.completed          = False
+        self.frames             = 0      # frames actually shown
 
     @property
     def running(self):
         return self._thread is not None and self._thread.is_alive()
 
-    def start(self, name, steps, on_finish=None):
+    def start(self, name, steps, on_finish=None, on_step=None):
         with self._lock:
             self.stop()
             self._stop = threading.Event()
             self.name       = name
             self.completed  = False
+            self.frames     = 0
             self._thread = threading.Thread(
-                target=self._run, args=(steps, self._stop, on_finish),
+                target=self._run, args=(steps, self._stop, on_finish, on_step),
                 name=f"MagicHome-{name}", daemon=True)
             self._thread.start()
         return True
@@ -261,12 +263,38 @@ class EffectRunner(object):
             return ctrl.set_colour(step.rgb[0], step.rgb[1], step.rgb[2])
         return True
 
-    def _run(self, steps, stop_event, on_finish):
+    def _run(self, steps, stop_event, on_finish, on_step=None):
+        """Walk the plan against the CLOCK, not step by step.
+
+        A short sleep is not short. Measured inside the Indigo plugin host, an
+        Event.wait(0.05) comes back after about 0.10 — macOS gives a sleeping
+        thread generous timer slack, and no amount of arithmetic makes it
+        wake sooner. Walking the plan one step per sleep therefore ran every
+        effect 15-20% long.
+
+        So a frame whose moment has already passed is DROPPED rather than
+        shown late. A fade then loses frames on a busy machine instead of
+        losing time, which is the right way round: a slightly coarser fade
+        looks the same, whereas a sunrise finishing three minutes after dawn
+        does not. The last frame is never dropped, so it still lands exactly
+        on target.
+        """
         failures = 0
+        started  = time.monotonic()
+        target   = 0.0          # when the CURRENT step should begin
+        pending  = None         # a dropped frame, kept in case it is the last
         try:
             for step in steps:
                 if stop_event.is_set():
                     return
+
+                behind = (time.monotonic() - started) - target
+                target += step.hold
+
+                if step.hold > 0 and behind > step.hold:
+                    pending = step          # its moment has gone; drop it
+                    continue
+
                 if not self._apply(step):
                     failures += 1
                     # A controller that has gone away will not come back inside
@@ -278,9 +306,27 @@ class EffectRunner(object):
                         return
                 else:
                     failures = 0
+                pending        = None
                 self.last_step = step
-                if step.hold > 0 and stop_event.wait(step.hold):
+                self.frames   += 1
+
+                if on_step is not None:
+                    try:
+                        on_step(step)
+                    except Exception:
+                        self.logger.exception("Effect %r step callback failed", self.name)
+
+                remaining = started + target - time.monotonic()
+                if remaining > 0 and stop_event.wait(remaining):
                     return
+
+            # Whatever the timing did to the middle, finish where we said we
+            # would. Landing a frame short leaves the lights on a colour nobody
+            # asked for.
+            if pending is not None and not stop_event.is_set():
+                self._apply(pending)
+                self.last_step = pending
+                self.frames   += 1
             self.completed = True
         except Exception:
             # One bad effect must never take the plugin's worker down with it.
