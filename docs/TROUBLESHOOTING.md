@@ -8,7 +8,9 @@
 
 **Check it is powered and joined.** If the Magic Home app cannot see it either, the problem is not the plugin.
 
-**Bluetooth-only controllers cannot be found at all.** Some recent Zengge hardware has dropped the network protocol. If the app reaches your lights over Bluetooth rather than wifi, nothing here can help.
+**Bluetooth-only controllers cannot be found at all**, because they are not on the network to be found. Some recent Zengge hardware — the `LEDnetWF` family and various BL602-based controllers — dropped the wifi protocol entirely.
+
+To settle which kind you have: **turn Bluetooth off on your phone, stay on your home wifi, and open the Magic Home app.** If the lights still work, it is a wifi controller and the problem is elsewhere on this page. If the app cannot find them, it is Bluetooth-only and nothing here will help — there is no setting to change and no workaround.
 
 ## The device says offline
 

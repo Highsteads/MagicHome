@@ -4,6 +4,17 @@ An Indigo plugin for Zengge WiFi LED controllers — the ones sold under **Magic
 
 It talks to them directly on your own network. No cloud account, no app running in the background, no credentials to store anywhere.
 
+> ### Check this first — it takes ten seconds
+>
+> These lights come in **two incompatible kinds**, and only one of them is reachable from Indigo.
+>
+> **Turn Bluetooth off on your phone, stay on your home wifi, and open the Magic Home app.**
+>
+> - **The lights still work** → a wifi controller. This plugin will drive it.
+> - **The app cannot find them** → a Bluetooth-only controller. **This plugin cannot reach it, and nor can any other Indigo plugin.** Nothing on your network can see it, because it is not on your network.
+>
+> Some recent Zengge hardware — the `LEDnetWF` family and various BL602-based controllers — dropped the wifi protocol entirely. There is no setting to turn it back on and no workaround.
+
 ## What you get
 
 - A native Indigo **dimmer** device, so the standard brightness slider and colour picker just work, along with everything that already understands a dimmer — control pages, triggers, schedules, HomeKit bridges, Alexa.
@@ -17,7 +28,7 @@ Any controller that answers on TCP 5577 — bulbs, strip controllers and the dec
 
 Developed against a **FVTLED / Zengge RGBW controller** (hardware `AK001-ZJ21413`, model byte `0x06`, firmware v4). Other models are supported from a table of known types; an unrecognised one is driven with the common message shape and says so in the log rather than pretending it was recognised.
 
-**Bluetooth-only controllers are not supported.** Some recent Zengge hardware has dropped the WiFi protocol entirely — if the Magic Home app finds your lights over Bluetooth rather than the network, this plugin cannot reach them.
+**Bluetooth-only controllers are not supported** — see the check at the top. If your lights only answer over Bluetooth they are not on your network at all, so there is nothing for this plugin to talk to.
 
 ## A word about white
 
