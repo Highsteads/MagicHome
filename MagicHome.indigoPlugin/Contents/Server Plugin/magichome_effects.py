@@ -171,11 +171,14 @@ def plan_sunrise(duration, fps=DEFAULT_FPS, ember=(60, 6, 0), peak=(255, 170, 90
     mid = tuple(_clamp_byte(e + (p - e) * 0.55) for e, p in zip(ember, peak))
     plan = plan_fade(ember, mid, duration * 0.66, fps=fps, ease="gamma")
 
-    if peak_white is None:
-        plan += plan_fade(mid, peak, duration * 0.34, fps=fps, ease="smooth")
-    else:
-        plan += plan_fade(mid, peak, duration * 0.34, fps=fps, ease="smooth",
-                          start_white=0, end_white=peak_white)
+    plan += plan_fade(mid, peak, duration * 0.34, fps=fps, ease="smooth")
+
+    if peak_white is not None:
+        # An RGBW fixture shows colour OR white, so the two cannot be
+        # crossfaded — measured, not assumed. Finish with a clean switch to the
+        # white channel at full rather than a fade that would only ever apply
+        # half of itself.
+        plan.append(Step(rgb=None, white=_clamp_byte(peak_white), hold=0.0))
     return plan
 
 
@@ -247,12 +250,16 @@ class EffectRunner(object):
         ctrl = self.controller
         if step.rgb is not None and step.white is not None and self.allow_simultaneous:
             return ctrl.set_colour(step.rgb[0], step.rgb[1], step.rgb[2], white=step.white)
-        ok = True
-        if step.rgb is not None:
-            ok = ctrl.set_colour(step.rgb[0], step.rgb[1], step.rgb[2]) and ok
+        # Where both channels cannot be driven at once, sending both in turn
+        # would leave only the second one showing. Apply the one that was
+        # evidently meant instead.
+        if step.rgb is not None and any(step.rgb):
+            return ctrl.set_colour(step.rgb[0], step.rgb[1], step.rgb[2])
         if step.white is not None:
-            ok = ctrl.set_warm_white(step.white) and ok
-        return ok
+            return ctrl.set_warm_white(step.white)
+        if step.rgb is not None:
+            return ctrl.set_colour(step.rgb[0], step.rgb[1], step.rgb[2])
+        return True
 
     def _run(self, steps, stop_event, on_finish):
         failures = 0

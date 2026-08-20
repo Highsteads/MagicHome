@@ -74,19 +74,31 @@ class FakeSocket(object):
         self.closed = True
 
 
+TIMEOUT = object()          # script entry meaning "this recv times out"
+
+
 class FakeUdpSocket(object):
-    def __init__(self, replies, raise_on_send=None):
-        self._replies      = list(replies)
+    """A scriptable UDP socket. Entries may be payloads or TIMEOUT."""
+
+    def __init__(self, replies, raise_on_send=None, bind_fails=False):
+        self._replies       = list(replies)
         self._raise_on_send = raise_on_send
-        self.sent          = []
-        self.closed        = False
-        self.options       = []
+        self._bind_fails    = bind_fails
+        self.sent           = []
+        self.closed         = False
+        self.options        = []
+        self.bound          = None
 
     def setsockopt(self, level, name, value):
         self.options.append((level, name, value))
 
     def settimeout(self, value):
         pass
+
+    def bind(self, addr):
+        if self._bind_fails:
+            raise OSError("address already in use")
+        self.bound = addr
 
     def sendto(self, payload, addr):
         if self._raise_on_send:
@@ -96,7 +108,10 @@ class FakeUdpSocket(object):
     def recvfrom(self, size):
         if not self._replies:
             raise socket.timeout("timed out")
-        return self._replies.pop(0), ("192.168.1.1", proto.DISCOVERY_PORT)
+        item = self._replies.pop(0)
+        if item is TIMEOUT:
+            raise socket.timeout("timed out")
+        return item, ("192.168.1.1", proto.DISCOVERY_PORT)
 
     def close(self):
         self.closed = True
@@ -151,11 +166,28 @@ class TestSending(unittest.TestCase):
         self.assertFalse(ctrl.turn_on())
         self.assertFalse(ctrl.available)
 
-    def test_colour_with_white_uses_the_both_channels_mask(self):
+    def test_a_model_that_honours_both_gets_one_message(self):
         sock = FakeSocket()
         ctrl = controller([sock])
+        ctrl.model_num = 0x04                    # measured as honouring MASK_BOTH
         ctrl.set_colour(10, 20, 30, white=40)
         self.assertEqual(sock.sent[-1][5], proto.MASK_BOTH)
+
+    def test_a_model_that_cannot_do_both_does_not_silently_drop_the_white(self):
+        # Measured on a model 0x06: a MASK_BOTH message is accepted, reports
+        # success, and the white channel never moves. Sending it anyway would
+        # be a confident no-op.
+        sock = FakeSocket()
+        ctrl = controller([sock])                # model 0x06
+        ctrl.set_colour(10, 20, 30, white=40)
+        self.assertEqual(sock.sent[-1][5], proto.MASK_COLOUR)
+
+    def test_white_alone_on_such_a_model_reaches_the_white_channel(self):
+        sock = FakeSocket()
+        ctrl = controller([sock])
+        ctrl.set_colour(0, 0, 0, white=200)
+        self.assertEqual(sock.sent[-1][5], proto.MASK_WHITE)
+        self.assertEqual(sock.sent[-1][4], 200)
 
     def test_colour_without_white_leaves_the_white_channel_alone(self):
         sock = FakeSocket()
@@ -246,48 +278,72 @@ class TestDiscovery(unittest.TestCase):
 
     def test_finds_a_controller(self):
         udp = FakeUdpSocket([b"192.168.1.50,806A34112233,AK001-ZJ21413,uuid"])
-        found = mdev.discover(timeout=0.2, socket_factory=lambda: udp)
+        found = mdev.discover(timeout=0.6, socket_factory=lambda: udp)
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0].ip, "192.168.1.50")
 
     def test_broadcast_is_actually_enabled(self):
         udp = FakeUdpSocket([])
-        mdev.discover(timeout=0.2, socket_factory=lambda: udp)
+        mdev.discover(timeout=0.6, socket_factory=lambda: udp)
         self.assertTrue(any(name == socket.SO_BROADCAST for _l, name, _v in udp.options))
 
     def test_our_own_probe_coming_back_is_ignored(self):
         udp = FakeUdpSocket([proto.DISCOVERY_PROBE,
                              b"192.168.1.9,AABBCCDDEEFF,AK001-ZJ200,uuid"])
-        found = mdev.discover(timeout=0.2, socket_factory=lambda: udp)
+        found = mdev.discover(timeout=0.6, socket_factory=lambda: udp)
         self.assertEqual(len(found), 1)
 
     def test_duplicate_replies_collapse_to_one_controller(self):
         udp = FakeUdpSocket([b"192.168.1.9,AABBCCDDEEFF,AK001-ZJ200,uuid"] * 3)
-        self.assertEqual(len(mdev.discover(timeout=0.2, socket_factory=lambda: udp)), 1)
+        self.assertEqual(len(mdev.discover(timeout=0.6, socket_factory=lambda: udp)), 1)
 
     def test_rubbish_replies_are_dropped_not_half_parsed(self):
         udp = FakeUdpSocket([b"nonsense", b"192.168.1.9,AABBCCDDEEFF,AK001,uuid"])
-        self.assertEqual(len(mdev.discover(timeout=0.2, socket_factory=lambda: udp)), 1)
+        self.assertEqual(len(mdev.discover(timeout=0.6, socket_factory=lambda: udp)), 1)
 
     def test_a_broken_network_yields_an_empty_list_not_an_exception(self):
         udp = FakeUdpSocket([], raise_on_send=OSError("network is down"))
-        self.assertEqual(mdev.discover(timeout=0.2, socket_factory=lambda: udp), [])
+        self.assertEqual(mdev.discover(timeout=0.6, socket_factory=lambda: udp), [])
+
+    def test_it_probes_more_than_once_because_udp_broadcast_is_lossy(self):
+        # Measured on the live network: a single probe finds the controller
+        # about half the time. A discovery that returns nothing because one
+        # frame went missing looks exactly like a house with no controllers.
+        udp = FakeUdpSocket([])
+        mdev.discover(timeout=1.0, probes=4, socket_factory=lambda: udp)
+        self.assertGreater(len(udp.sent), 1)
+
+    def test_a_reply_arriving_after_a_gap_is_still_collected(self):
+        udp = FakeUdpSocket([TIMEOUT, TIMEOUT,
+                             b"192.168.1.9,AABBCCDDEEFF,AK001-ZJ200,uuid"])
+        found = mdev.discover(timeout=1.5, probes=3, socket_factory=lambda: udp)
+        self.assertEqual(len(found), 1)
+
+    def test_it_binds_the_discovery_port(self):
+        udp = FakeUdpSocket([])
+        mdev.discover(timeout=0.6, socket_factory=lambda: udp)
+        self.assertEqual(udp.bound, ("", proto.DISCOVERY_PORT))
+
+    def test_a_port_already_in_use_does_not_stop_discovery(self):
+        udp = FakeUdpSocket([b"192.168.1.9,AABBCCDDEEFF,AK001-ZJ200,uuid"],
+                            bind_fails=True)
+        self.assertEqual(len(mdev.discover(timeout=0.6, socket_factory=lambda: udp)), 1)
 
     def test_the_socket_is_always_closed(self):
         udp = FakeUdpSocket([])
-        mdev.discover(timeout=0.2, socket_factory=lambda: udp)
+        mdev.discover(timeout=0.6, socket_factory=lambda: udp)
         self.assertTrue(udp.closed)
 
     def test_resolve_ip_finds_a_moved_controller(self):
         udp = FakeUdpSocket([b"192.168.1.99,806A34112233,AK001-ZJ21413,uuid"])
         self.assertEqual(
-            mdev.resolve_ip("80:6a:34:11:22:33", timeout=0.2, socket_factory=lambda: udp),
+            mdev.resolve_ip("80:6a:34:11:22:33", timeout=0.6, socket_factory=lambda: udp),
             "192.168.1.99")
 
     def test_resolve_ip_returns_none_when_it_did_not_answer(self):
         udp = FakeUdpSocket([b"192.168.1.9,AABBCCDDEEFF,AK001,uuid"])
         self.assertIsNone(
-            mdev.resolve_ip("806A34112233", timeout=0.2, socket_factory=lambda: udp))
+            mdev.resolve_ip("806A34112233", timeout=0.6, socket_factory=lambda: udp))
 
 
 if __name__ == "__main__":

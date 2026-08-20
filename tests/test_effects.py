@@ -241,13 +241,27 @@ class TestRunner(unittest.TestCase):
         time.sleep(0.1)
         self.assertEqual(seen, [])
 
-    def test_white_and_colour_go_separately_unless_the_model_allows_both(self):
+    def test_only_the_evident_channel_is_driven_when_both_is_impossible(self):
+        # Sending both in turn would leave only the second one showing, so the
+        # colour wins while there is a colour to show.
         ctrl   = FakeController()
         runner = fx.EffectRunner(ctrl, allow_simultaneous=False)
         runner.start("mix", [fx.Step(rgb=(1, 2, 3), white=44, hold=0)])
         runner._thread.join(3)
         self.assertEqual(ctrl.colours[-1], (1, 2, 3, None))
+        self.assertEqual(ctrl.whites, [])
+
+    def test_white_wins_when_there_is_no_colour_to_show(self):
+        ctrl   = FakeController()
+        runner = fx.EffectRunner(ctrl, allow_simultaneous=False)
+        runner.start("mix", [fx.Step(rgb=(0, 0, 0), white=44, hold=0)])
+        runner._thread.join(3)
         self.assertEqual(ctrl.whites[-1], 44)
+
+    def test_a_sunrise_finishing_on_white_ends_on_the_white_channel(self):
+        plan = fx.plan_sunrise(30, fps=5, peak_white=255)
+        self.assertIsNone(plan[-1].rgb)
+        self.assertEqual(plan[-1].white, 255)
 
     def test_both_go_in_one_message_when_the_model_allows_it(self):
         ctrl   = FakeController()

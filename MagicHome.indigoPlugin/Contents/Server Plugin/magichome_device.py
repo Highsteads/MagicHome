@@ -59,6 +59,7 @@ class Controller(object):
         self.last_state    = None
         self.failures      = 0
         self._retry_after  = 0.0
+        self._warned_about_both = False
 
     # -- connection ---------------------------------------------------------
 
@@ -220,12 +221,34 @@ class Controller(object):
         return self.send(proto.power(False, self.model_num or 0x06))
 
     def set_colour(self, red, green, blue, white=None):
-        model = self.model_num or 0x06
+        """Set the colour, and the white channel too where the model allows it.
+
+        An RGBW controller shows EITHER its colour channels or its white one.
+        Measured on a model 0x06: a MASK_BOTH message is accepted, reports
+        success, and the white channel never moves. So rather than send a
+        message that quietly does half of what was asked, the caller is warned
+        once and the evident intent is applied.
+        """
+        model_num = self.model_num or 0x06
+        model     = proto.model_for(model_num)
+
         if white is None:
-            return self.send(proto.colour(red, green, blue, model_num=model,
+            return self.send(proto.colour(red, green, blue, model_num=model_num,
                                           mask=proto.MASK_COLOUR))
-        return self.send(proto.colour(red, green, blue, white=white,
-                                      model_num=model, mask=proto.MASK_BOTH))
+
+        if model.honours_both:
+            return self.send(proto.colour(red, green, blue, white=white,
+                                          model_num=model_num, mask=proto.MASK_BOTH))
+
+        if not self._warned_about_both:
+            self._warned_about_both = True
+            LOG.warning("%s is a %s — it shows colour or white, not both at once. "
+                        "Asking for both applies whichever was actually wanted.",
+                        self.name, model.name)
+        if any((red, green, blue)):
+            return self.send(proto.colour(red, green, blue, model_num=model_num,
+                                          mask=proto.MASK_COLOUR))
+        return self.send(proto.warm_white(white, model_num=model_num))
 
     def set_warm_white(self, level):
         return self.send(proto.warm_white(level, self.model_num or 0x06))
@@ -244,28 +267,57 @@ class Controller(object):
 # Discovery
 # ---------------------------------------------------------------------------
 
-def discover(timeout=3.0, broadcast="255.255.255.255", socket_factory=None):
-    """Broadcast for controllers and return what answers, newest reply wins.
+def discover(timeout=4.0, broadcast="255.255.255.255", socket_factory=None,
+             probes=4):
+    """Broadcast for controllers and return what answers.
 
     Discovery is by MAC, and that is the point: these controllers take a DHCP
     lease and move. An IP typed into a config dialog is correct exactly until
     the router hands out a different one.
+
+    The probe is sent SEVERAL times across the listening window. Measured on a
+    live network: a single probe finds the controller perhaps half the time.
+    UDP broadcast on wifi is sent at the lowest rate with no acknowledgement
+    and no retry, so losing one frame is ordinary — and a discovery that
+    returns nothing because one frame went missing looks exactly like a house
+    with no controllers in it.
     """
-    make = socket_factory or (lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+    make  = socket_factory or (lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
     found = {}
-    sock = None
+    sock  = None
     try:
         sock = make()
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(timeout)
-        sock.sendto(proto.DISCOVERY_PROBE, (broadcast, proto.DISCOVERY_PORT))
+        try:
+            # Some firmware answers to the discovery port rather than to the
+            # port the probe came from. Binding covers both; if the port is
+            # already taken, carry on unbound rather than failing outright.
+            sock.bind(("", proto.DISCOVERY_PORT))
+        except OSError as err:
+            LOG.debug("Could not bind the discovery port, continuing unbound — %s", err)
 
+        timeout  = max(0.5, float(timeout))
+        probes   = max(1, int(probes))
+        sock.settimeout(0.5)
         deadline = time.time() + timeout
+        gap      = timeout / probes
+        next_probe = 0.0
+        sent = 0
+
         while time.time() < deadline:
+            if sent < probes and time.time() >= next_probe:
+                try:
+                    sock.sendto(proto.DISCOVERY_PROBE, (broadcast, proto.DISCOVERY_PORT))
+                except OSError as err:
+                    LOG.warning("Controller discovery failed — %s", err)
+                    break
+                sent += 1
+                next_probe = time.time() + gap
             try:
                 payload, _addr = sock.recvfrom(1024)
             except (socket.timeout, TimeoutError):
-                break
+                continue            # keep listening; do NOT give up on one gap
             except OSError as err:
                 LOG.debug("discovery receive failed — %s", err)
                 break

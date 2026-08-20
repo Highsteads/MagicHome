@@ -94,23 +94,30 @@ MODE_PRESET_LO, MODE_PRESET_HI = 0x25, 0x38
 #   9  -> 31 R G B W W2 <mask> 0f         (RGBWW / RGBCW controllers)
 #   0  -> the pre-checksum original protocol, handled separately
 
-Model = namedtuple("Model", "name channels msg_len has_white has_two_whites")
+Model = namedtuple("Model",
+                   "name channels msg_len has_white has_two_whites honours_both")
+
+# `honours_both` — whether the controller applies a MASK_BOTH message to the
+# colour AND white channels at once. Measured False on a model 0x06: the
+# message is accepted, reports success, and the white channel never moves. That
+# is the worst available failure, so the caller is told rather than left to
+# believe it worked.
 
 MODELS = {
-    0x01: Model("Legacy controller",       "RGB",   0, False, False),
-    0x04: Model("Controller RGBW",         "RGBW",  8, True,  False),
-    0x06: Model("Controller RGBW",         "RGBW",  8, True,  False),
-    0x07: Model("Controller RGBCW",        "RGBWW", 9, True,  True),
-    0x21: Model("Dimmable white bulb",     "W",     8, True,  False),
-    0x25: Model("Controller RGBWW",        "RGBWW", 9, True,  True),
-    0x27: Model("Warm white controller",   "W",     9, True,  False),
-    0x33: Model("Controller RGB",          "RGB",   8, False, False),
-    0x35: Model("Bulb RGBWW",              "RGBWW", 9, True,  True),
-    0x44: Model("Bulb RGBW",               "RGBW",  8, True,  False),
-    0x81: Model("Controller RGBW",         "RGBW",  8, True,  False),
+    0x01: Model("Legacy controller",       "RGB",   0, False, False, False),
+    0x04: Model("Controller RGBW",         "RGBW",  8, True,  False, True),
+    0x06: Model("Controller RGBW",         "RGBW",  8, True,  False, False),
+    0x07: Model("Controller RGBCW",        "RGBWW", 9, True,  True, False),
+    0x21: Model("Dimmable white bulb",     "W",     8, True,  False, False),
+    0x25: Model("Controller RGBWW",        "RGBWW", 9, True,  True, False),
+    0x27: Model("Warm white controller",   "W",     9, True,  False, False),
+    0x33: Model("Controller RGB",          "RGB",   8, False, False, False),
+    0x35: Model("Bulb RGBWW",              "RGBWW", 9, True,  True, False),
+    0x44: Model("Bulb RGBW",               "RGBW",  8, True,  False, False),
+    0x81: Model("Controller RGBW",         "RGBW",  8, True,  False, True),
 }
 
-UNKNOWN_MODEL = Model("Unknown controller", "RGBW", 8, True, False)
+UNKNOWN_MODEL = Model("Unknown controller", "RGBW", 8, True, False, False)
 
 
 def model_for(model_num):
@@ -213,6 +220,29 @@ def speed_to_delay(speed):
     speed = int(_clamp_percent(speed))
     delay = int(((100 - speed) * (MAX_DELAY - 1)) / 100) + 1
     return max(1, min(MAX_DELAY, delay))
+
+
+def decode_speed_byte(value):
+    """Turn the state frame's byte 5 into a 0-100 speed.
+
+    Measured on firmware v4 of a model 0x06: the frame reports `100 - 3 *
+    delay`, NOT the raw delay flux_led expects. Asking for speeds of 90, 50 and
+    10 read back as 88, 52 and 16, which inverts to exactly 90, 50 and 10,
+    three times out of three.
+
+    The two encodings overlap between 7 and 31, so a byte in that range is
+    genuinely ambiguous. The measured form wins, because it is the only one
+    this code has ever seen a real controller use; a byte that cannot be a
+    valid delay under it falls back to being read as a raw delay.
+    """
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return 0
+    delay = int(round((100 - value) / 3.0))
+    if not 1 <= delay <= MAX_DELAY:
+        delay = value
+    return delay_to_speed(delay)
 
 
 def delay_to_speed(delay):
@@ -335,7 +365,7 @@ def parse_state(data):
         # Speed is only meaningful while a preset is running. Reporting a
         # number for it in static colour mode would be a number that means
         # nothing, which reads as a measurement.
-        speed       = (delay_to_speed(data[5])
+        speed       = (decode_speed_byte(data[5])
                        if MODE_PRESET_LO <= data[3] <= MODE_PRESET_HI else None),
         red         = data[6],
         green       = data[7],
