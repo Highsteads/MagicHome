@@ -1,0 +1,91 @@
+<?xml version="1.0"?>
+<Devices>
+	<!-- A Magic Home / Zengge WiFi LED controller.
+
+	     Declared as a native Indigo dimmer so the standard brightness slider
+	     and colour picker apply. The colour channel states (redLevel,
+	     greenLevel, blueLevel, whiteLevel) are NATIVE to a colour-capable
+	     dimmer and must not be declared here — Indigo builds them from the
+	     Supports* properties below. -->
+	<Device type="dimmer" id="magicHomeLight">
+		<Name>Magic Home Light</Name>
+		<ConfigUI>
+			<Field id="addressMode" type="menu" defaultValue="discover">
+				<Label>Find the controller by:</Label>
+				<List>
+					<Option value="discover">Discovery (recommended — survives a changed IP)</Option>
+					<Option value="manual">A fixed IP address</Option>
+				</List>
+			</Field>
+
+			<Field id="discoveredLabel" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true"
+			       visibleBindingId="addressMode" visibleBindingValue="discover">
+				<Label>Controllers answer a broadcast with their MAC address, so the device keeps working when DHCP moves it. Use Plugins -> MagicHome -> Discover Controllers if the list is empty.</Label>
+			</Field>
+			<Field id="mac" type="menu" visibleBindingId="addressMode" visibleBindingValue="discover">
+				<Label>Controller:</Label>
+				<List class="self" method="discovered_controllers" dynamicReload="true"/>
+			</Field>
+
+			<Field id="ipAddress" type="textfield" visibleBindingId="addressMode" visibleBindingValue="manual">
+				<Label>IP address:</Label>
+			</Field>
+			<Field id="manualLabel" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true"
+			       visibleBindingId="addressMode" visibleBindingValue="manual">
+				<Label>A fixed IP needs a DHCP reservation on your router, or the device will stop working the day the lease changes.</Label>
+			</Field>
+
+			<Field id="sep1" type="separator"/>
+
+			<Field id="whiteMode" type="menu" defaultValue="warm">
+				<Label>"White" on this fixture means:</Label>
+				<List>
+					<Option value="warm">Warm — the dedicated white channel</Option>
+					<Option value="cool">Cool — red, green and blue together</Option>
+				</List>
+			</Field>
+			<Field id="whiteModeLabel" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+				<Label>An RGBW controller has one white channel, which is the warm one. The Magic Home app produces cool white by driving red, green and blue together — there is no second white channel to address.</Label>
+			</Field>
+
+			<Field id="pollInterval" type="textfield" defaultValue="15">
+				<Label>Check the controller every (seconds):</Label>
+			</Field>
+
+			<!-- Set from the model the controller reports, not guessed here. -->
+			<Field id="SupportsColor" type="checkbox" hidden="true" defaultValue="true"/>
+			<Field id="SupportsRGB" type="checkbox" hidden="true" defaultValue="true"/>
+			<Field id="SupportsWhite" type="checkbox" hidden="true" defaultValue="true"/>
+			<Field id="SupportsTwoWhiteLevels" type="checkbox" hidden="true" defaultValue="false"/>
+			<Field id="SupportsWhiteTemperature" type="checkbox" hidden="true" defaultValue="false"/>
+			<Field id="SupportsRGBandWhiteSimultaneously" type="checkbox" hidden="true" defaultValue="false"/>
+		</ConfigUI>
+		<States>
+			<State id="controllerModel">
+				<ValueType>String</ValueType>
+				<TriggerLabel>Controller Model</TriggerLabel>
+				<ControlPageLabel>Controller Model</ControlPageLabel>
+			</State>
+			<State id="controllerAddress">
+				<ValueType>String</ValueType>
+				<TriggerLabel>IP Address</TriggerLabel>
+				<ControlPageLabel>IP Address</ControlPageLabel>
+			</State>
+			<State id="online">
+				<ValueType>Boolean</ValueType>
+				<TriggerLabel>Online</TriggerLabel>
+				<ControlPageLabel>Online</ControlPageLabel>
+			</State>
+			<State id="mode">
+				<ValueType>String</ValueType>
+				<TriggerLabel>Mode</TriggerLabel>
+				<ControlPageLabel>Mode</ControlPageLabel>
+			</State>
+			<State id="effect">
+				<ValueType>String</ValueType>
+				<TriggerLabel>Running Effect</TriggerLabel>
+				<ControlPageLabel>Running Effect</ControlPageLabel>
+			</State>
+		</States>
+	</Device>
+</Devices>

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<MenuItems>
+	<MenuItem id="discoverControllers">
+		<Name>Discover Controllers</Name>
+		<CallbackMethod>discover_controllers_menu</CallbackMethod>
+	</MenuItem>
+	<MenuItem id="testConnection">
+		<Name>Test Connection</Name>
+		<CallbackMethod>test_connection</CallbackMethod>
+	</MenuItem>
+	<MenuItem id="sep_info" isSeparator="true"/>
+	<MenuItem id="showPluginInfo">
+		<Name>Show Plugin Info</Name>
+		<CallbackMethod>showPluginInfo</CallbackMethod>
+	</MenuItem>
+</MenuItems>

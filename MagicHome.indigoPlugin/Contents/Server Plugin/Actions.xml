@@ -1,0 +1,152 @@
+<?xml version="1.0"?>
+<Actions>
+	<!-- No uiPath here on purpose. uiPath="DeviceActions" files these inside
+	     Indigo's OWN Device Actions submenu alongside Turn On / Turn Off,
+	     where they are easily mistaken for the built-ins. Left off, they
+	     appear under the plugin's own name, which is unambiguous. -->
+
+	<Action id="setWarmWhite" deviceFilter="self.magicHomeLight">
+		<Name>Set Warm White</Name>
+		<CallbackMethod>action_warm_white</CallbackMethod>
+		<ConfigUI>
+			<Field id="level" type="textfield" defaultValue="100">
+				<Label>Level (0-100):</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
+
+	<Action id="setCoolWhite" deviceFilter="self.magicHomeLight">
+		<Name>Set Cool White</Name>
+		<CallbackMethod>action_cool_white</CallbackMethod>
+		<ConfigUI>
+			<Field id="level" type="textfield" defaultValue="100">
+				<Label>Level (0-100):</Label>
+			</Field>
+			<Field id="note" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+				<Label>On an RGBW controller this drives red, green and blue together — the same thing the Magic Home app does.</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
+
+	<Action id="setPreset" deviceFilter="self.magicHomeLight">
+		<Name>Run Built-in Pattern</Name>
+		<CallbackMethod>action_preset</CallbackMethod>
+		<ConfigUI>
+			<Field id="pattern" type="menu" defaultValue="37">
+				<Label>Pattern:</Label>
+				<List class="self" method="preset_list"/>
+			</Field>
+			<Field id="speed" type="textfield" defaultValue="50">
+				<Label>Speed (0-100):</Label>
+			</Field>
+			<Field id="note" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+				<Label>These run on the controller itself, so nothing further crosses the network once started.</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
+
+	<Action id="fadeToColour" deviceFilter="self.magicHomeLight">
+		<Name>Fade To Colour</Name>
+		<CallbackMethod>action_fade</CallbackMethod>
+		<ConfigUI>
+			<Field id="red" type="textfield" defaultValue="255">
+				<Label>Red (0-255):</Label>
+			</Field>
+			<Field id="green" type="textfield" defaultValue="140">
+				<Label>Green (0-255):</Label>
+			</Field>
+			<Field id="blue" type="textfield" defaultValue="60">
+				<Label>Blue (0-255):</Label>
+			</Field>
+			<Field id="duration" type="textfield" defaultValue="5">
+				<Label>Over (seconds):</Label>
+			</Field>
+			<Field id="ease" type="menu" defaultValue="smooth">
+				<Label>Ramp:</Label>
+				<List>
+					<Option value="smooth">Smooth — gentle at both ends</Option>
+					<Option value="linear">Linear</Option>
+					<Option value="gamma">Perceptual — matches how the eye reads brightness</Option>
+				</List>
+			</Field>
+		</ConfigUI>
+	</Action>
+
+	<Action id="startDrift" deviceFilter="self.magicHomeLight">
+		<Name>Start Colour Drift</Name>
+		<CallbackMethod>action_drift</CallbackMethod>
+		<ConfigUI>
+			<Field id="palette" type="textfield" defaultValue="255,140,60 / 200,60,120 / 60,90,200">
+				<Label>Palette:</Label>
+			</Field>
+			<Field id="paletteNote" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+				<Label>Colours as R,G,B separated by a slash. Three or four suit a shelf; more just makes it restless.</Label>
+			</Field>
+			<Field id="hold" type="textfield" defaultValue="120">
+				<Label>Hold each colour (seconds):</Label>
+			</Field>
+			<Field id="fade" type="textfield" defaultValue="20">
+				<Label>Crossfade over (seconds):</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
+
+	<Action id="startSunrise" deviceFilter="self.magicHomeLight">
+		<Name>Start Sunrise</Name>
+		<CallbackMethod>action_sunrise</CallbackMethod>
+		<ConfigUI>
+			<Field id="duration" type="textfield" defaultValue="900">
+				<Label>Over (seconds):</Label>
+			</Field>
+			<Field id="finishWhite" type="checkbox" defaultValue="true">
+				<Label>Finish on warm white</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
+
+	<Action id="flashColour" deviceFilter="self.magicHomeLight">
+		<Name>Flash</Name>
+		<CallbackMethod>action_flash</CallbackMethod>
+		<ConfigUI>
+			<Field id="red" type="textfield" defaultValue="255"><Label>Red (0-255):</Label></Field>
+			<Field id="green" type="textfield" defaultValue="0"><Label>Green (0-255):</Label></Field>
+			<Field id="blue" type="textfield" defaultValue="0"><Label>Blue (0-255):</Label></Field>
+			<Field id="times" type="textfield" defaultValue="3"><Label>Times:</Label></Field>
+			<Field id="restore" type="checkbox" defaultValue="true">
+				<Label>Put the previous colour back afterwards</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
+
+	<Action id="setCustomPattern" deviceFilter="self.magicHomeLight">
+		<Name>Load Custom Pattern</Name>
+		<CallbackMethod>action_custom_pattern</CallbackMethod>
+		<ConfigUI>
+			<Field id="palette" type="textfield" defaultValue="255,0,0 / 0,255,0 / 0,0,255">
+				<Label>Colours:</Label>
+			</Field>
+			<Field id="speed" type="textfield" defaultValue="30"><Label>Speed (0-100):</Label></Field>
+			<Field id="transition" type="menu" defaultValue="gradual">
+				<Label>Transition:</Label>
+				<List>
+					<Option value="gradual">Gradual</Option>
+					<Option value="jump">Jump</Option>
+					<Option value="strobe">Strobe</Option>
+				</List>
+			</Field>
+			<Field id="note" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+				<Label>Up to 16 colours, stored in the controller and cycled by it. Unlike Colour Drift this needs no further traffic, but the timing is the controller's and it is coarser.</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
+
+	<Action id="stopEffect" deviceFilter="self.magicHomeLight">
+		<Name>Stop Effect</Name>
+		<CallbackMethod>action_stop_effect</CallbackMethod>
+		<ConfigUI>
+			<Field id="note" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+				<Label>Stops a plugin-driven effect and leaves the lights where they are. Any manual command stops one too.</Label>
+			</Field>
+		</ConfigUI>
+	</Action>
+</Actions>

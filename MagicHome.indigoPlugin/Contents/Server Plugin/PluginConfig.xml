@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<PluginConfig>
+	<Field id="intro" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+		<Label>MagicHome talks to Zengge / Magic Home WiFi LED controllers directly on your network. No cloud account and no credentials are involved.</Label>
+	</Field>
+
+	<Field id="pollInterval" type="textfield" defaultValue="15">
+		<Label>Default poll interval (seconds):</Label>
+	</Field>
+	<Field id="discoverOnStartup" type="checkbox" defaultValue="true">
+		<Label>Look for controllers when the plugin starts</Label>
+	</Field>
+	<Field id="rediscoverMinutes" type="textfield" defaultValue="15">
+		<Label>Re-check addresses every (minutes):</Label>
+	</Field>
+	<Field id="rediscoverNote" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+		<Label>Controllers take a DHCP lease, so their address can change. A device set to use discovery is re-found automatically; one pinned to a fixed IP is not.</Label>
+	</Field>
+
+	<Field id="sep1" type="separator"/>
+
+	<Field id="effectFps" type="textfield" defaultValue="20">
+		<Label>Effect smoothness (updates per second):</Label>
+	</Field>
+	<Field id="effectFpsNote" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+		<Label>Twenty is smooth and comfortably within what the controller accepts. Much above twenty-five and commands start being dropped, which shows as stutter.</Label>
+	</Field>
+
+	<Field id="sep2" type="separator"/>
+
+	<Field id="debugLogging" type="checkbox" defaultValue="false">
+		<Label>Debug logging</Label>
+	</Field>
+</PluginConfig>
