@@ -84,15 +84,26 @@ Worth knowing if you are ever debugging it.
 - Controllers **push their own state unprompted**, wrapped in a `b0 b1 b2 b3` header. One reply per request is not a safe assumption, so every state read scans for a frame and checks its checksum rather than trusting what arrives.
 - Sending a colour to a controller that is off **turns it on**.
 
-## Troubleshooting
+## Documentation
 
-**Discovery finds nothing.** The controller must be on the same subnet as the Indigo server — a separate IoT VLAN without a broadcast route will not work. UDP broadcast on wifi is genuinely lossy, so the plugin probes four times per sweep; if a sweep still comes back empty, run it again before concluding anything.
+| | |
+|---|---|
+| [Protocol reference](docs/PROTOCOL.md) | The wire protocol, measured against real hardware — framing, commands, state, discovery, model table, and the several places where the published accounts and the controller disagree |
+| [Architecture](docs/ARCHITECTURE.md) | How the plugin is built and why, including the timer-slack problem that shapes the effects engine |
+| [Scripting](docs/SCRIPTING.md) | Driving it from Indigo Python, with worked examples |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | When it does not do what you expected |
 
-**The device says offline.** Check the address in the device's states against what Discover Controllers reports. A controller pinned to a fixed IP that has since moved will sit offline until you correct it or switch it to discovery.
+## Troubleshooting in brief
 
-**Colours look wrong.** Strip controllers can be wired in any channel order, and a strip wired GRB shows red where you asked for green. That is the wiring, not the plugin — the Magic Home app has a wiring-order setting for it.
+**Discovery finds nothing.** The controller must be on the same subnet as the Indigo server — a broadcast does not cross a router. Run the sweep again before concluding anything; UDP broadcast on wifi is genuinely lossy.
+
+**The device says offline.** Compare its address state against what Discover Controllers reports. A device set to discovery heals itself within a minute or two; one pinned to a fixed IP that has moved will not.
+
+**Colours are wrong.** Strip controllers can be wired in any channel order — a strip wired GRB shows red where you asked for green. That is the wiring, and the Magic Home app has a setting for it.
 
 **An effect stutters.** Lower the effect smoothness. Commands sent faster than the controller accepts are dropped rather than queued.
+
+The [full troubleshooting guide](docs/TROUBLESHOOTING.md) covers the rest.
 
 ## Authors & licence
 
