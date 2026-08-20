@@ -37,6 +37,7 @@ The two are mutually exclusive on this hardware: the fixture shows its colour ch
 2. **New Device -> MagicHome -> Magic Home Light.**
 3. Leave the finding method on **Discovery** and pick your controller from the list. It is named by the last six characters of its MAC address, the same way the Magic Home app names it.
 4. Save. The device fills in straight away.
+5. Optional, but worth it: **Plugins → MagicHome → Configure**, pick the light and press **Run Demo**. It runs through the three colour channels one at a time, both whites and a fade, then puts the light back exactly as it was — about fifteen seconds. Showing the channels separately is how you spot a strip wired in a different order, and showing both whites is how the warm/cool business stops being a surprise.
 
 The controller must be on the same subnet as your Indigo server for discovery to find it. If you would rather pin an address, switch to **A fixed IP address** — but give the controller a DHCP reservation on your router first, or the device will stop working the day its lease changes.
 
@@ -73,6 +74,8 @@ Any manual command stops a running effect, so grabbing the brightness slider alw
 | Re-check addresses | 15 min | Finds a controller its DHCP lease has moved |
 | Effect smoothness | 20/sec | Measured ceiling is about 40; above 25 commands start being dropped |
 | Debug logging | off | |
+
+The Configure dialog also carries a **Run Demo** button, and there is a **Run Demo** item in the plugin's menu that demos every light you have.
 
 ## How it talks to the controller
 

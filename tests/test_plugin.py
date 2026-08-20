@@ -462,6 +462,83 @@ class TestEffectPublishing(unittest.TestCase):
         self.assertEqual(dev.states["brightnessLevel"], 100)
 
 
+class TestDemo(unittest.TestCase):
+
+    def test_the_plan_shows_each_colour_channel_separately(self):
+        # Showing them one at a time is also how you spot a strip wired in the
+        # wrong channel order.
+        p = make_plugin()
+        rgbs = [st.rgb for st in p._demo_plan(REAL_RED) if st.rgb is not None]
+        for expected in ((255, 0, 0), (0, 255, 0), (0, 0, 255)):
+            self.assertIn(expected, rgbs)
+
+    def test_the_plan_shows_both_whites(self):
+        # The difference between them is the most surprising thing about this
+        # hardware, so a demo that skipped it would be missing the point.
+        p    = make_plugin()
+        plan = p._demo_plan(REAL_RED)
+        self.assertTrue(any(st.white == 255 for st in plan), "no warm white")
+        self.assertIn((255, 255, 255), [st.rgb for st in plan], "no cool white")
+
+    def test_it_ends_where_it_started(self):
+        p    = make_plugin()
+        plan = p._demo_plan(REAL_RED)          # was full red, colour mode
+        self.assertEqual(plan[-1].rgb, (255, 0, 0))
+
+    def test_it_restores_a_light_that_was_in_white_mode(self):
+        p    = make_plugin()
+        plan = p._demo_plan(REAL_WHITE)
+        self.assertIsNone(plan[-1].rgb)
+        self.assertEqual(plan[-1].white, 255)
+
+    def test_it_still_builds_when_the_previous_state_is_unknown(self):
+        p = make_plugin()
+        self.assertTrue(p._demo_plan(None))
+
+    def test_it_is_short(self):
+        p = make_plugin()
+        length = sum(st.hold for st in p._demo_plan(REAL_RED))
+        self.assertLess(length, 25, f"demo is {length:.0f}s, which is not short")
+        self.assertGreater(length, 8)
+
+    def test_it_refuses_a_light_with_no_address(self):
+        p, dev = make_plugin(), FakeDevice()
+        wire(p, dev, controller=FakeController(ip=""))
+        self.assertFalse(p._start_demo(dev))
+
+    def test_it_refuses_a_light_that_is_not_answering(self):
+        # Nothing to demo, and starting anyway would log a confident no-op.
+        p, dev = make_plugin(), FakeDevice()
+        wire(p, dev, controller=FakeController(state=None))
+        self.assertFalse(p._start_demo(dev))
+
+    def test_the_button_refuses_when_nothing_is_picked(self):
+        p = make_plugin()
+        result = p.run_demo({"demoDevice": ""})
+        self.assertEqual(result, {"demoDevice": ""})
+
+    def test_the_button_returns_the_dialog_values_unchanged(self):
+        p = make_plugin()
+        values = {"demoDevice": "999999", "pollInterval": "15"}
+        self.assertEqual(p.run_demo(values), values)
+
+    def test_the_device_picker_lists_the_plugins_devices(self):
+        # plugin.py holds its own reference to the indigo module, so the
+        # devices have to be put on THAT one, not on a freshly installed stub.
+        p = make_plugin()
+        plug.indigo.devices.all = [FakeDevice(dev_id=42, name="Shelf Lights")]
+        try:
+            self.assertEqual(p.magic_home_devices(), [("42", "Shelf Lights")])
+        finally:
+            plug.indigo.devices.all = []
+
+    def test_the_picker_says_so_when_there_are_no_devices(self):
+        p = make_plugin()
+        rows = p.magic_home_devices()
+        self.assertEqual(len(rows), 1)
+        self.assertIn("No MagicHome devices", rows[0][1])
+
+
 class TestPrefs(unittest.TestCase):
 
     def test_defaults_apply_when_nothing_is_saved(self):

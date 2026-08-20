@@ -21,7 +21,9 @@ Compare the device's `controllerAddress` state against what **Discover Controlle
 
 ## The colours are wrong
 
-**Red shows as green, or similar.** Strip controllers can be wired in any channel order, and a strip wired GRB shows red where you asked for green. The Magic Home app has a wiring-order setting for it; that is where to fix it.
+**Red shows as green, or similar.** Run the demo first — **Plugins → MagicHome → Configure → Run Demo**, or the **Run Demo** item in the plugin's menu. It shows red, green and blue one at a time, so a strip wired in a different channel order gives itself away in the first five seconds.
+
+Strip controllers can be wired in any order, and a strip wired GRB shows red where you asked for green. That is the wiring rather than the plugin — the Magic Home app has a setting for it, and that is where to fix it.
 
 **Cool white looks like colour rather than white.** It is. An RGBW controller has one white channel and it is the warm one — the app's cool white is red, green and blue together, and this plugin does the same thing. If the result looks tinted, the strip's channels are not perfectly balanced, which is a property of the strip.
 
@@ -48,6 +50,12 @@ If a setting has been left blank, the plugin falls back to a default rather than
 ## Nothing in the log at all
 
 Turn on **Debug logging** in the plugin settings. Normal operation is deliberately quiet: Indigo's own start line, one line at startup, and a line per command.
+
+## Checking a controller quickly
+
+**Run Demo** puts a light through the three colour channels one at a time, both whites and a fade, then restores it exactly as it was. About fifteen seconds. It is the fastest way to answer "is this wired the way I think, and can Indigo actually reach it".
+
+It stops the moment any command arrives for that light, so you can cut it short by touching the brightness slider. If it is stopped part way it leaves the light on, rather than guessing that you wanted it off.
 
 ## Getting help
 

@@ -66,6 +66,14 @@ The device is a native Indigo `dimmer` with `SupportsColor`, `SupportsRGB` and `
 
 **An unanswered query is published as unknown, not as off.** Recording it as off would invent a reading nobody took, and a dead controller would look like a light somebody had switched off.
 
+### The demo
+
+**Run Demo** is built as an ordinary effect plan and handed to the same runner, rather than as a loop of its own with its own sleeps. It therefore inherits accurate pacing, stopping the instant a manual command arrives, and publishing what it is showing as it goes — none of which had to be written twice.
+
+The config dialog button returns immediately and leaves the runner to it. A dialog callback that blocked for the length of the demo would hit Indigo's callback timeout and leave the dialog looking hung.
+
+The last step of the plan restores whatever the light was showing beforehand, and a light that was **off** is only put back off if the demo actually reached the end — one stopped half way was stopped by somebody who wanted the light on.
+
 ### Addressing
 
 A device is addressed by **MAC**, resolved to an IP through discovery. These controllers take a DHCP lease and move; an IP typed into a dialog is correct exactly until the router says otherwise.

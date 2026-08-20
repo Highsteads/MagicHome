@@ -28,6 +28,22 @@
 
 	<Field id="sep2" type="separator"/>
 
+	<Field id="demoLabel" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+		<Label>A short demo runs through the colour channels, both whites and a fade, then puts the light back exactly as it was. About fifteen seconds. Handy for checking a new controller is wired the way you expect.</Label>
+	</Field>
+	<Field id="demoDevice" type="menu">
+		<Label>Demo this light:</Label>
+		<List class="self" method="magic_home_devices" dynamicReload="true"/>
+	</Field>
+	<Field id="runDemo" type="button" enabledBindingId="demoDevice"
+	       tooltip="Runs a short sequence so you can see the light respond">
+		<Label>Try it:</Label>
+		<Title>Run Demo</Title>
+		<CallbackMethod>run_demo</CallbackMethod>
+	</Field>
+
+	<Field id="sep3" type="separator"/>
+
 	<Field id="debugLogging" type="checkbox" defaultValue="false">
 		<Label>Debug logging</Label>
 	</Field>

@@ -57,11 +57,33 @@ class FakeDevice(object):
 
 
 class _Devices(object):
+    """Mimics indigo.devices closely enough to matter.
+
+    Membership and subscript are both real behaviours the plugin relies on —
+    and on a live server a membership test with an unknown id returns False
+    rather than raising, which is what makes a guarded `in` check safe.
+    """
+
     def __init__(self):
         self.all = []
 
     def iter(self, _filter=""):
         return list(self.all)
+
+    def __iter__(self):
+        return iter(self.all)
+
+    def __contains__(self, key):
+        return any(d.id == key for d in self.all)
+
+    def __getitem__(self, key):
+        for d in self.all:
+            if d.id == key:
+                return d
+        raise KeyError(key)
+
+    def __len__(self):
+        return len(self.all)
 
 
 def install():

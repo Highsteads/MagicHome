@@ -5,7 +5,7 @@
 #              LED controllers, with no cloud account and no app
 # Author:      CliveS & Claude Opus 5
 # Date:        20-08-2026 21:55
-# Version:     1.0.1
+# Version:     1.1.0
 
 import os as _os
 import sys as _sys
@@ -36,7 +36,7 @@ except ImportError:                                     # pragma: no cover
             return False
         return default
 
-PLUGIN_VERSION = "1.0.1"
+PLUGIN_VERSION = "1.1.0"
 
 DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
@@ -860,6 +860,116 @@ class Plugin(indigo.PluginBase):
         name = runner.name
         self._stop_effect(dev, "on request")
         self.logger.info(f"stopped \"{name}\" on \"{dev.name}\"")
+
+    # -- demo ---------------------------------------------------------------
+
+    def magic_home_devices(self, filter="", valuesDict=None, typeId="", targetId=0):
+        """Dynamic list of this plugin's devices, for the demo picker."""
+        rows = [(str(dev.id), dev.name)
+                for dev in indigo.devices.iter("self.magicHomeLight") if dev.enabled]
+        return rows or [("", "No MagicHome devices yet")]
+
+    def _demo_plan(self, state):
+        """The demo, as a list of steps, ending back where it started.
+
+        Built as an ordinary effect plan so it inherits everything the runner
+        already does — accurate pacing, stopping the moment a manual command
+        arrives, and publishing what it is showing as it goes.
+
+        The order is chosen to show the things that are actually worth seeing:
+        the three colour channels one at a time (which is also how you spot a
+        strip wired in the wrong channel order), then BOTH whites one after the
+        other, because the difference between them is the single most
+        surprising thing about this hardware.
+        """
+        beat = 1.2
+        plan = [
+            fx.Step(rgb=(255, 0, 0), white=None, hold=beat),
+            fx.Step(rgb=(0, 255, 0), white=None, hold=beat),
+            fx.Step(rgb=(0, 0, 255), white=None, hold=beat),
+            fx.Step(rgb=None, white=255, hold=beat * 1.4),          # warm white
+            fx.Step(rgb=(255, 255, 255), white=None, hold=beat * 1.4),  # cool white
+        ]
+        plan += fx.plan_fade((255, 255, 255), (255, 140, 60), 5.0,
+                             fps=self.effect_fps, ease="smooth")
+        plan.append(fx.Step(rgb=(255, 140, 60), white=None, hold=beat))
+
+        # Put it back exactly as it was. A demo that leaves the lights on some
+        # other colour has made work for whoever ran it.
+        if state is not None:
+            if state.is_white_mode:
+                plan.append(fx.Step(rgb=None, white=state.white, hold=0.0))
+            else:
+                plan.append(fx.Step(rgb=state.rgb, white=None, hold=0.0))
+        return plan
+
+    def _start_demo(self, dev):
+        controller = self.store["controllers"].get(dev.id)
+        if controller is None or not controller.ip:
+            self.logger.error(f"\"{dev.name}\" has no address — nothing to demo")
+            return False
+
+        state = controller.read_state(force=True)
+        if state is None:
+            self.logger.error(f"\"{dev.name}\" is not answering — "
+                              f"nothing to demo ({controller.last_error})")
+            return False
+
+        was_on = state.is_on
+        plan   = self._demo_plan(state)
+        length = sum(step.hold for step in plan)
+
+        self.logger.info(f"Demo on \"{dev.name}\" — red, green, blue, warm white, "
+                         f"cool white, then a fade. About {length:.0f} seconds. "
+                         f"Any command to the light stops it.")
+        if not was_on:
+            controller.turn_on()
+
+        def finished(completed):
+            # Only put it back off if the demo actually reached the end. A demo
+            # stopped half way was stopped by somebody wanting the light on.
+            try:
+                if completed and not was_on:
+                    controller.turn_off()
+                self.store["next_poll"][dev.id] = 0.0
+                if completed:
+                    self.logger.info(f"Demo on \"{dev.name}\" finished — "
+                                     f"put back as it was")
+            except Exception:
+                self.logger.exception("Tidying up after the demo failed")
+
+        runner = self.store["effects"].get(dev.id)
+        if runner is None:
+            return False
+        runner.stop()
+        runner.start("demo", plan, on_finish=finished,
+                     on_step=lambda step: self._publish_step(dev, step))
+        dev.updateStateOnServer("effect", "demo")
+        return True
+
+    def run_demo(self, valuesDict=None, typeId="", devId=0):
+        """The Run Demo button in the plugin's Configure dialog.
+
+        Returns immediately. A config dialog callback that blocks for the
+        length of the demo would hit Indigo's callback timeout and leave the
+        dialog looking hung — the work belongs on the runner's own thread.
+        """
+        values = valuesDict if valuesDict is not None else {}
+        dev_id = as_int(values.get("demoDevice"), 0)
+        if not dev_id or dev_id not in indigo.devices:
+            self.logger.error("Pick a light to demo first")
+            return values
+        self._start_demo(indigo.devices[dev_id])
+        return values
+
+    def run_demo_menu(self, valuesDict=None, typeId=None):
+        """Plugins -> MagicHome -> Run Demo. Demos every light in turn."""
+        devices = [d for d in indigo.devices.iter("self.magicHomeLight") if d.enabled]
+        if not devices:
+            self.logger.warning("No MagicHome devices to demo")
+            return
+        for dev in devices:
+            self._start_demo(dev)
 
     # -- menu items ---------------------------------------------------------
 

@@ -4,6 +4,10 @@
 		<Name>Discover Controllers</Name>
 		<CallbackMethod>discover_controllers_menu</CallbackMethod>
 	</MenuItem>
+	<MenuItem id="runDemoMenu">
+		<Name>Run Demo</Name>
+		<CallbackMethod>run_demo_menu</CallbackMethod>
+	</MenuItem>
 	<MenuItem id="testConnection">
 		<Name>Test Connection</Name>
 		<CallbackMethod>test_connection</CallbackMethod>
