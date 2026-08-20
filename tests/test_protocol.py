@@ -6,9 +6,12 @@
 # Date:        20-08-2026 21:55
 # Version:     1.0
 #
-# Every REAL_* fixture below is a byte string captured from the live FVTLED /
-# Zengge controller on 20-08-2026, not one composed to match the parser. A
-# fixture built from an assumption only ever tests the assumption.
+# Every REAL_* fixture below is a byte string captured from a live FVTLED /
+# Zengge controller, not one composed to match the parser. A fixture built from
+# an assumption only ever tests the assumption.
+#
+# The addresses in the discovery fixture are anonymised — the shape and the
+# manufacturer prefix are real, the host and device parts are not.
 
 import os
 import sys
