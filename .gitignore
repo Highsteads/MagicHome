@@ -10,3 +10,4 @@ Contents/Packages/
 **/Contents/Packages/
 CLAUDE.md
 .pytest_cache/
+*.indigoPlugin.zip
