@@ -5,7 +5,7 @@
 #              LED controllers, with no cloud account and no app
 # Author:      CliveS & Claude Opus 5
 # Date:        20-08-2026 21:55
-# Version:     1.1.1
+# Version:     1.1.2
 
 import os as _os
 import sys as _sys
@@ -36,7 +36,7 @@ except ImportError:                                     # pragma: no cover
             return False
         return default
 
-PLUGIN_VERSION = "1.1.1"
+PLUGIN_VERSION = "1.1.2"
 
 DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
@@ -465,10 +465,25 @@ class Plugin(indigo.PluginBase):
             {"key": "effect",            "value": (runner.name if runner and runner.running
                                                    else "none")},
         ]
-        for key, value in (("redLevel",   state.red),
-                           ("greenLevel", state.green),
-                           ("blueLevel",  state.blue),
-                           ("whiteLevel", state.white)):
+        # In white mode the controller reports its colour channels as zero,
+        # because they genuinely are off. Publishing that wipes the light's
+        # colour out of Indigo, and the colour picker then opens on a black
+        # wheel with nothing to go back to.
+        #
+        # So the last colour is kept instead. It is a setting rather than a
+        # measurement — what the light would show if you asked for colour again
+        # — and `mode` says "White" plainly, so nothing here claims the red
+        # emitter is lit. It also matches what every other colour light in the
+        # house does: a Zigbee bulb sitting in colour-temp mode keeps its RGB
+        # values rather than reporting zeros.
+        keep_last_colour = state.is_white_mode and not any(state.rgb)
+
+        channels = [("whiteLevel", state.white)]
+        if not keep_last_colour:
+            channels += [("redLevel",   state.red),
+                         ("greenLevel", state.green),
+                         ("blueLevel",  state.blue)]
+        for key, value in channels:
             if key in dev.states:
                 updates.append({"key": key, "value": to_percent(value)})
 

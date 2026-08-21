@@ -225,6 +225,40 @@ class TestPublishing(unittest.TestCase):
         self.assertEqual(dev.states["mode"], "White")
         self.assertEqual(dev.states["whiteLevel"], 100)
 
+    def test_white_mode_keeps_the_last_colour_rather_than_zeroing_it(self):
+        # The controller reports RGB as zero in white mode because the colour
+        # emitters really are off. Publishing that wipes the colour out of
+        # Indigo and the picker opens on a black wheel with nothing to return
+        # to — which is exactly what happened in v1.1.1.
+        p, dev = make_plugin(), FakeDevice()
+        ctrl = wire(p, dev)
+        p._publish(dev, REAL_RED, ctrl)                 # full red first
+        self.assertEqual(dev.states["redLevel"], 100)
+        p._publish(dev, REAL_WHITE, ctrl)               # now warm white
+        self.assertEqual(dev.states["redLevel"], 100, "the colour was thrown away")
+        self.assertEqual(dev.states["whiteLevel"], 100)
+        self.assertEqual(dev.states["mode"], "White")
+
+    def test_colour_mode_still_updates_the_colour(self):
+        p, dev = make_plugin(), FakeDevice()
+        ctrl = wire(p, dev)
+        p._publish(dev, REAL_WHITE, ctrl)
+        p._publish(dev, REAL_RED, ctrl)
+        self.assertEqual(dev.states["redLevel"], 100)
+        self.assertEqual(dev.states["blueLevel"], 0)
+
+    def test_a_genuine_black_in_colour_mode_is_still_published(self):
+        # Colour mode at zero is a real reading, not the white-mode artefact.
+        raw = bytearray(REAL_RED.raw)
+        raw[6] = raw[7] = raw[8] = 0
+        raw[13] = proto.checksum(raw[:13])
+        black = proto.parse_state(bytes(raw))
+        p, dev = make_plugin(), FakeDevice()
+        ctrl = wire(p, dev)
+        p._publish(dev, REAL_RED, ctrl)
+        p._publish(dev, black, ctrl)
+        self.assertEqual(dev.states["redLevel"], 0)
+
     def test_a_running_preset_is_named(self):
         raw = bytearray(REAL_RED.raw)
         raw[3] = 0x38
