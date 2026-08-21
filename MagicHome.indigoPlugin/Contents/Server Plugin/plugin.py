@@ -5,7 +5,7 @@
 #              LED controllers, with no cloud account and no app
 # Author:      CliveS & Claude Opus 5
 # Date:        20-08-2026 21:55
-# Version:     1.1.0
+# Version:     1.1.1
 
 import os as _os
 import sys as _sys
@@ -36,7 +36,7 @@ except ImportError:                                     # pragma: no cover
             return False
         return default
 
-PLUGIN_VERSION = "1.1.0"
+PLUGIN_VERSION = "1.1.1"
 
 DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
@@ -983,14 +983,28 @@ class Plugin(indigo.PluginBase):
         for entry in found:
             self.logger.info(f"    {entry.name}  {entry.ip}  {entry.mac}")
 
+    def _banner_extras(self):
+        """Extra banner lines, as (label, value) PAIRS.
+
+        plugin_utils unpacks these with `for label, value in extras`, so a
+        list of pre-formatted strings makes it try to unpack a string into two
+        names and throw. The contract is in its docstring; I passed strings
+        without reading it, and both this and Show Plugin Info died on the
+        first click.
+        """
+        return [
+            ("Poll interval:",    f"{self.poll_interval}s"),
+            ("Effect rate:",      f"{self.effect_fps}/second"),
+            ("Controllers seen:", str(len(self.store["discovered"]))),
+            ("Devices:",          str(len(list(indigo.devices.iter("self.magicHomeLight"))))),
+        ]
+
     def test_connection(self, valuesDict=None, typeId=None):
         # Full environment first, then the result — one log dump that can be
         # pasted straight into a support post.
         if log_startup_banner:
             log_startup_banner(self.pluginId, self.pluginDisplayName, self.pluginVersion,
-                               extras=[f"Poll interval:   {self.poll_interval}s",
-                                       f"Effect rate:     {self.effect_fps}/s",
-                                       f"Known on LAN:    {len(self.store['discovered'])}"])
+                               extras=self._banner_extras())
 
         devices = list(indigo.devices.iter("self.magicHomeLight"))
         if not devices:
@@ -1016,8 +1030,6 @@ class Plugin(indigo.PluginBase):
     def showPluginInfo(self, valuesDict=None, typeId=None):
         if log_startup_banner:
             log_startup_banner(self.pluginId, self.pluginDisplayName, self.pluginVersion,
-                               extras=[f"Poll interval:   {self.poll_interval}s",
-                                       f"Effect rate:     {self.effect_fps}/s",
-                                       f"Known on LAN:    {len(self.store['discovered'])}"])
+                               extras=self._banner_extras())
         else:
             indigo.server.log(f"{self.pluginDisplayName} v{self.pluginVersion}")

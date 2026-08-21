@@ -539,6 +539,66 @@ class TestDemo(unittest.TestCase):
         self.assertIn("No MagicHome devices", rows[0][1])
 
 
+class TestBannerExtras(unittest.TestCase):
+    """The banner is what a user pastes into a bug report, so it failing is
+    worse than most bugs — it takes out the thing they were reaching for."""
+
+    def test_extras_are_label_value_pairs(self):
+        # plugin_utils unpacks with `for label, value in extras`. A list of
+        # pre-formatted strings makes it unpack a STRING into two names.
+        p = make_plugin()
+        for entry in p._banner_extras():
+            self.assertIsInstance(entry, tuple)
+            self.assertEqual(len(entry), 2)
+            self.assertIsInstance(entry[0], str)
+            self.assertIsInstance(entry[1], str)
+
+    def test_the_real_plugin_utils_accepts_them(self):
+        # Exercised against the SHIPPED utility, not a re-implementation —
+        # the whole failure was a wrong assumption about its contract, and a
+        # fake that shared the assumption would have passed happily.
+        import plugin_utils
+        lines = []
+        original = plugin_utils.indigo
+        try:
+            plugin_utils.indigo = _CapturingIndigo(lines)
+            p = make_plugin()
+            plugin_utils.log_startup_banner("com.clives.indigoplugin.magichome",
+                                            "MagicHome", "9.9.9",
+                                            extras=p._banner_extras())
+        finally:
+            plugin_utils.indigo = original
+
+        self.assertTrue(lines, "the banner produced nothing")
+        self.assertTrue(lines[-1].startswith("="),
+                        "no closing bar — the banner threw part way through")
+        self.assertTrue(any("Poll interval:" in ln for ln in lines))
+
+    def test_a_string_extras_list_would_still_be_caught(self):
+        # Guards the guard: prove the check above can actually fail.
+        import plugin_utils
+        lines = []
+        original = plugin_utils.indigo
+        try:
+            plugin_utils.indigo = _CapturingIndigo(lines)
+            with self.assertRaises(ValueError):
+                plugin_utils.log_startup_banner("x", "MagicHome", "9.9.9",
+                                                extras=["Poll interval:  15s"])
+        finally:
+            plugin_utils.indigo = original
+
+
+class _CapturingIndigo(object):
+    """Just enough of the indigo module for plugin_utils to draw a banner."""
+
+    def __init__(self, sink):
+        self.server = type("S", (), {
+            "log": staticmethod(lambda msg, **kw: sink.append(msg)),
+            "version": "2025.2.0",
+            "apiVersion": "3.8",
+        })()
+
+
 class TestPrefs(unittest.TestCase):
 
     def test_defaults_apply_when_nothing_is_saved(self):

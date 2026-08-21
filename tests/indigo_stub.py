@@ -114,7 +114,9 @@ def install():
     mod.List       = list
     mod.devices    = _Devices()
     mod.server     = _Enum(log=lambda *a, **k: None,
-                           getInstallFolderPath=lambda: "/tmp")
+                           getInstallFolderPath=lambda: "/tmp",
+                           version="2025.2.0",
+                           apiVersion="3.8")
     mod.kDeviceAction = _Enum(TurnOn="on", TurnOff="off", Toggle="toggle",
                               SetBrightness="setbright", BrightenBy="brighten",
                               DimBy="dim", SetColorLevels="setcolor",
