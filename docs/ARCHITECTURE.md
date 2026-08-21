@@ -89,6 +89,12 @@ While an effect runs the plugin knows exactly what it is showing, so it says so 
 
 The **final** frame is published immediately, throttle or no throttle. Without that the device sits showing a colour from part way through the fade until the next poll corrects it: a reading that is wrong rather than merely old.
 
+## A note on diagnosing this plugin
+
+`actionControlDevice` logs a **warning** for any action it does not handle, and a debug line for every action it does. That exists because of a specific afternoon: colour changes stopped arriving, and with no catch-all there was no way to tell "the plugin was called and did nothing" from "the plugin was never called at all". Those two look identical in an empty log and have completely different causes.
+
+It turned out to be the second — an open colour picker orphaned by a plugin restart — but only after a long hunt through code that was working perfectly. A single line saying "I was asked to do X and have no handler for it" would have ruled out half the search space immediately.
+
 ## Tests
 
 187 of them, in four files. `tests/indigo_stub.py` provides just enough of the `indigo` module that the **shipped** `plugin.py` can be imported and its real methods called — a re-implementation in the test file would only ever test the re-implementation.

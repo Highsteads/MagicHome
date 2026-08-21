@@ -5,7 +5,7 @@
 #              LED controllers, with no cloud account and no app
 # Author:      CliveS & Claude Opus 5
 # Date:        20-08-2026 21:55
-# Version:     1.1.2
+# Version:     1.1.3
 
 import os as _os
 import sys as _sys
@@ -36,7 +36,7 @@ except ImportError:                                     # pragma: no cover
             return False
         return default
 
-PLUGIN_VERSION = "1.1.2"
+PLUGIN_VERSION = "1.1.3"
 
 DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
@@ -234,6 +234,45 @@ class Plugin(indigo.PluginBase):
 
         dev.updateStateOnServer("controllerAddress", ip)
         self._poll_device(dev, force=True)
+        self._assert_capabilities(dev, controller)
+
+    def _assert_capabilities(self, dev, controller):
+        """Tell Indigo what this controller can do, from what it reports.
+
+        The Supports* properties are how Indigo decides which controls to offer
+        and which actions to dispatch, and the documented way to set them is
+        replacePluginPropsOnServer — which makes the server rebuild the
+        device's capabilities. Leaving them to whatever the device happened to
+        be created with means trusting a guess made before the hardware had
+        said a word.
+
+        replacePluginPropsOnServer REPLACES rather than merges, so the whole
+        dict goes back, and it is only called when something actually differs
+        — writing identical props on every start would churn the device for no
+        reason.
+        """
+        model = proto.model_for(controller.model_num or 0x06)
+        wanted = {
+            "SupportsColor":                     True,
+            "SupportsRGB":                       "RGB" in model.channels,
+            "SupportsWhite":                     bool(model.has_white),
+            "SupportsTwoWhiteLevels":            bool(model.has_two_whites),
+            "SupportsWhiteTemperature":          False,
+            "SupportsRGBandWhiteSimultaneously": bool(model.honours_both),
+        }
+
+        props   = dict(dev.pluginProps)
+        changed = {k: v for k, v in wanted.items() if props.get(k) != v}
+        if not changed:
+            return False
+
+        props.update(wanted)
+        dev.replacePluginPropsOnServer(props)
+        self.logger.info(f"\"{dev.name}\" is a {model.name} ({model.channels}) — "
+                         f"told Indigo its capabilities: "
+                         + ", ".join(f"{k.replace('Supports', '')}={v}"
+                                     for k, v in sorted(changed.items())))
+        return True
 
     def deviceStopComm(self, dev):
         runner = self.store["effects"].pop(dev.id, None)
@@ -600,6 +639,13 @@ class Plugin(indigo.PluginBase):
     # -- Indigo device actions ---------------------------------------------
 
     def actionControlDevice(self, action, dev):
+        # Every dispatch is traceable. Without this an action that falls off
+        # the end of the chain below does nothing AND says nothing, which is
+        # indistinguishable from Indigo never having called us at all — and
+        # that ambiguity cost an afternoon.
+        self.logger.debug(f"actionControlDevice \"{dev.name}\": "
+                          f"deviceAction={action.deviceAction!r} "
+                          f"actionValue={getattr(action, 'actionValue', None)!r}")
         controller = self._controller(dev)
         if controller is None:
             return
@@ -650,10 +696,24 @@ class Plugin(indigo.PluginBase):
             self._poll_device(dev, force=True)
             self.logger.info(f"sent \"{dev.name}\" status request")
 
+        else:
+            # Being asked to do something and quietly not doing it is the worst
+            # available outcome: the user sees no effect and no explanation.
+            self.logger.warning(
+                f"\"{dev.name}\": no handler for device action "
+                f"{action.deviceAction!r} — nothing was sent. Please report this "
+                f"with what you were doing at the time.")
+
     def actionControlUniversal(self, action, dev):
+        self.logger.debug(f"actionControlUniversal \"{dev.name}\": "
+                          f"deviceAction={action.deviceAction!r}")
         if action.deviceAction == indigo.kUniversalAction.RequestStatus:
             self._poll_device(dev, force=True)
             self.logger.info(f"sent \"{dev.name}\" status request")
+        else:
+            self.logger.warning(
+                f"\"{dev.name}\": no handler for universal action "
+                f"{action.deviceAction!r} — nothing was sent.")
 
     def _set_brightness(self, dev, target):
         """Dim by scaling the current colour, keeping its hue."""

@@ -31,6 +31,16 @@ Strip controllers can be wired in any order, and a strip wired GRB shows red whe
 
 **Asking for colour and white together only applies one of them.** On most RGBW controllers the fixture shows colour or white, never both. The plugin applies whichever you evidently wanted and says so once in the log.
 
+## Changing the colour does nothing, but on and off still work
+
+**Close the colour picker and open it again.**
+
+If the plugin has been restarted — by you, by an upgrade, or by Indigo — any colour picker that was already open is left pointing at the plugin instance that no longer exists. Dragging it then does nothing at all: no change to the light, and nothing in the log, because the plugin is never called.
+
+On and off keep working throughout, which is what makes it so confusing. Those come from the device list, which stays live; only the open dialog is orphaned.
+
+This is not specific to MagicHome. It applies to any Indigo plugin, and it bites hardest while you are setting a plugin up, because that is exactly when it gets restarted with dialogs open.
+
 ## An effect stutters
 
 Lower **Effect smoothness** in the plugin settings. Commands sent faster than the controller accepts are dropped rather than queued, and the dropped ones show as a jump.

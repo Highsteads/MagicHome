@@ -633,6 +633,119 @@ class _CapturingIndigo(object):
         })()
 
 
+class TestUnhandledActions(unittest.TestCase):
+    """Being asked to do something and quietly not doing it is the worst
+    available outcome — no effect and no explanation, indistinguishable from
+    never having been called."""
+
+    class _Recorder(object):
+        def __init__(self):
+            self.warnings = []
+
+        def warning(self, msg, *a, **k):
+            self.warnings.append(str(msg))
+
+        def __getattr__(self, _name):
+            return lambda *a, **k: None
+
+    def test_an_unknown_device_action_is_reported(self):
+        p, dev = make_plugin(), FakeDevice()
+        wire(p, dev)
+        rec = self._Recorder()
+        p.logger = rec
+        p.actionControlDevice(FakeAction(device_action="somethingNew"), dev)
+        self.assertTrue(rec.warnings, "an unhandled action passed in silence")
+        self.assertIn("no handler", rec.warnings[0])
+
+    def test_an_unknown_universal_action_is_reported(self):
+        p, dev = make_plugin(), FakeDevice()
+        wire(p, dev)
+        rec = self._Recorder()
+        p.logger = rec
+        p.actionControlUniversal(FakeAction(device_action="somethingNew"), dev)
+        self.assertTrue(rec.warnings)
+
+    def test_handled_actions_do_not_warn(self):
+        p, dev = make_plugin(), FakeDevice()
+        wire(p, dev)
+        rec = self._Recorder()
+        p.logger = rec
+        p.actionControlDevice(FakeAction(device_action=plug.indigo.kDeviceAction.TurnOn), dev)
+        self.assertEqual(rec.warnings, [])
+
+    def test_set_color_levels_is_handled(self):
+        # The action at the centre of this whole hunt.
+        p, dev = make_plugin(), FakeDevice()
+        ctrl = wire(p, dev)
+        rec = self._Recorder()
+        p.logger = rec
+        p.actionControlDevice(
+            FakeAction(device_action=plug.indigo.kDeviceAction.SetColorLevels,
+                       action_value={"redLevel": 100, "greenLevel": 0, "blueLevel": 0}), dev)
+        self.assertEqual(rec.warnings, [])
+        self.assertIsNotNone(call_of(ctrl, "colour"))
+
+
+class TestCapabilityAssertion(unittest.TestCase):
+    """The Supports* props are how Indigo decides what controls to offer and
+    what actions to dispatch. They are set from what the controller reports,
+    not from whatever the device happened to be created with."""
+
+    class PropDevice(FakeDevice):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self.replaced = None
+
+        def replacePluginPropsOnServer(self, props):
+            self.replaced = dict(props)
+            self.pluginProps = dict(props)
+
+    def test_an_rgbw_controller_gets_rgb_and_one_white(self):
+        p    = make_plugin()
+        dev  = self.PropDevice(props={"addressMode": "discover", "mac": "AABBCCDDEEFF"})
+        ctrl = FakeController()                      # model 0x06
+        self.assertTrue(p._assert_capabilities(dev, ctrl))
+        self.assertTrue(dev.replaced["SupportsRGB"])
+        self.assertTrue(dev.replaced["SupportsWhite"])
+        self.assertFalse(dev.replaced["SupportsTwoWhiteLevels"])
+        self.assertFalse(dev.replaced["SupportsRGBandWhiteSimultaneously"])
+
+    def test_an_rgbww_controller_gets_two_white_levels(self):
+        p    = make_plugin()
+        dev  = self.PropDevice()
+        ctrl = FakeController()
+        ctrl.model_num = 0x07                        # Controller RGBCW
+        p._assert_capabilities(dev, ctrl)
+        self.assertTrue(dev.replaced["SupportsTwoWhiteLevels"])
+
+    def test_an_rgb_only_controller_declares_no_white(self):
+        p    = make_plugin()
+        dev  = self.PropDevice()
+        ctrl = FakeController()
+        ctrl.model_num = 0x33                        # Controller RGB
+        p._assert_capabilities(dev, ctrl)
+        self.assertFalse(dev.replaced["SupportsWhite"])
+
+    def test_the_whole_dict_goes_back_not_just_the_changes(self):
+        # replacePluginPropsOnServer REPLACES rather than merges, so anything
+        # left out would be silently dropped from the device.
+        p   = make_plugin()
+        dev = self.PropDevice(props={"addressMode": "discover", "mac": "AABBCCDDEEFF",
+                                     "pollInterval": "15"})
+        p._assert_capabilities(dev, FakeController())
+        self.assertEqual(dev.replaced["mac"], "AABBCCDDEEFF")
+        self.assertEqual(dev.replaced["pollInterval"], "15")
+
+    def test_it_does_not_churn_when_nothing_differs(self):
+        p   = make_plugin()
+        dev = self.PropDevice()
+        ctrl = FakeController()
+        p._assert_capabilities(dev, ctrl)
+        dev.replaced = None
+        self.assertFalse(p._assert_capabilities(dev, ctrl))
+        self.assertIsNone(dev.replaced, "wrote identical props again")
+
+
 class TestPrefs(unittest.TestCase):
 
     def test_defaults_apply_when_nothing_is_saved(self):
