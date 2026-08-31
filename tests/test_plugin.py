@@ -304,7 +304,7 @@ class TestBrightness(unittest.TestCase):
         # Reporting success from the absence of an exception is how a plugin
         # logs a confident no-op.
         p, dev = make_plugin(), FakeDevice()
-        ctrl = wire(p, dev, controller=FakeController(ok=False))
+        wire(p, dev, controller=FakeController(ok=False))
         p._set_brightness(dev, 60)
         self.assertEqual(dev.states["brightnessLevel"], 0)
 

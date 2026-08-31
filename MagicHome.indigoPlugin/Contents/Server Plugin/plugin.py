@@ -5,7 +5,7 @@
 #              LED controllers, with no cloud account and no app
 # Author:      CliveS & Claude Opus 5
 # Date:        20-08-2026 21:55
-# Version:     1.1.3
+# Version:     1.1.4
 
 import os as _os
 import sys as _sys
@@ -36,7 +36,7 @@ except ImportError:                                     # pragma: no cover
             return False
         return default
 
-PLUGIN_VERSION = "1.1.3"
+PLUGIN_VERSION = "1.1.4"
 
 DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
@@ -364,7 +364,6 @@ class Plugin(indigo.PluginBase):
     # -- worker -------------------------------------------------------------
 
     def runConcurrentThread(self):
-        import time
         last_rediscovery = self._now()
         try:
             while True:

@@ -1,5 +1,6 @@
 # MagicHome
 
+**Version:** 1.1.4
 An Indigo plugin for Zengge WiFi LED controllers — the ones sold under **Magic Home**, **Magic Hue**, **FVTLED**, **LEDENET** and a dozen other names, and set up with the Magic Home Pro app.
 
 It talks to them directly on your own network. No cloud account, no app running in the background, no credentials to store anywhere.
