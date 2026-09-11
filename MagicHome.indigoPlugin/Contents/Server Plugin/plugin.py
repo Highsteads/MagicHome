@@ -3,10 +3,9 @@
 # Filename:    plugin.py
 # Description: MagicHome — direct local control of Zengge / Magic Home WiFi
 #              LED controllers, with no cloud account and no app
-# Author:      CliveS & Claude Opus 5
-# Date:        20-08-2026 21:55
-# Version:     1.1.4
-
+# Author:      CliveS & Claude Fable 5.1
+# Date:        11-09-2026 21:55
+# Version:     1.1.5
 import os as _os
 import sys as _sys
 
@@ -36,7 +35,7 @@ except ImportError:                                     # pragma: no cover
             return False
         return default
 
-PLUGIN_VERSION = "1.1.4"
+PLUGIN_VERSION = "1.1.5"
 
 DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
