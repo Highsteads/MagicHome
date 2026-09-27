@@ -1,3 +1,9 @@
+---
+title: Troubleshooting notes
+parent: Technical notes
+nav_order: 4
+---
+
 # Troubleshooting
 
 ## Discovery finds nothing
@@ -16,7 +22,7 @@ To settle which kind you have: **turn Bluetooth off on your phone, stay on your 
 
 Compare the device's `controllerAddress` state against what **Discover Controllers** reports.
 
-- **Set to discovery:** the plugin re-checks addresses on a timer and hunts for a missing controller once a minute, so this should heal itself within a minute or two. If it does not, the controller is not answering at all.
+- **Set to discovery:** the plugin re-checks addresses on a timer, every 15 minutes by default, and moves the device to wherever its controller now answers. A device that has never been placed hunts for its controller once a minute. To pick up a move sooner, run **Discover Controllers** and then disable and re-enable the device. If none of that finds it, the controller is not answering at all.
 - **Pinned to a fixed IP:** it will sit offline until you correct the address or switch it to discovery. This is the failure a DHCP reservation prevents.
 
 `online` going False means the controller stopped answering. It does not mean the lights are off — the plugin leaves the on/off state alone rather than inventing one.
@@ -29,7 +35,7 @@ Strip controllers can be wired in any order, and a strip wired GRB shows red whe
 
 **Cool white looks like colour rather than white.** It is. An RGBW controller has one white channel and it is the warm one — the app's cool white is red, green and blue together, and this plugin does the same thing. If the result looks tinted, the strip's channels are not perfectly balanced, which is a property of the strip.
 
-**Asking for colour and white together only applies one of them.** On most RGBW controllers the fixture shows colour or white, never both. The plugin applies whichever you evidently wanted and says so once in the log.
+**Asking for colour and white together only applies one of them.** On most RGBW controllers the fixture shows colour or white, never both. The plugin applies whichever you evidently wanted.
 
 ## Changing the colour does nothing, but on and off still work
 
@@ -37,7 +43,7 @@ Strip controllers can be wired in any order, and a strip wired GRB shows red whe
 
 If the plugin has been restarted — by you, by an upgrade, or by Indigo — any colour picker that was already open is left pointing at the plugin instance that no longer exists. Dragging it then does nothing at all: no change to the light, and nothing in the log, because the plugin is never called.
 
-On and off keep working throughout, which is what makes it so confusing. Those come from the device list, which stays live; only the open dialog is orphaned.
+On and off keep working throughout, which is what makes it so confusing. Those come from the device list, which stays live. Only the open dialog is orphaned.
 
 This is not specific to MagicHome. It applies to any Indigo plugin, and it bites hardest while you are setting a plugin up, because that is exactly when it gets restarted with dialogs open.
 

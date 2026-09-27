@@ -1,3 +1,9 @@
+---
+title: Driving MagicHome from a script
+parent: Technical notes
+nav_order: 3
+---
+
 # Driving MagicHome from a script
 
 Everything below runs in an Indigo Python script or the scripting shell. `DEV` is your Magic Home device's id.
@@ -76,8 +82,8 @@ dev.brightness         # 0-100
 dev.states["redLevel"] # 0-100, likewise green, blue, white
 
 dev.states["online"]            # False when the controller is not answering
-dev.states["mode"]              # "Colour", "White", "Custom pattern", "Pattern: <name>"
-dev.states["effect"]            # "fade", "drift", "sunrise", "flash", or "none"
+dev.states["mode"]              # "Colour", "White", "Custom pattern", "Pattern: <name>", "unknown"
+dev.states["effect"]            # "fade", "drift", "sunrise", "flash", "demo", or "none"
 dev.states["controllerAddress"] # where it was last found
 dev.states["controllerModel"]   # what the controller reports itself as
 ```

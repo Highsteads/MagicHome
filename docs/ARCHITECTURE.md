@@ -1,3 +1,9 @@
+---
+title: How the plugin is put together
+parent: Technical notes
+nav_order: 2
+---
+
 # How the plugin is put together
 
 Four files, in layers, with no upward dependencies. The point of the split is that most of the plugin can be tested without a controller, without Indigo, and without a network.
@@ -14,7 +20,7 @@ magichome_protocol.py   bytes
 
 ## `magichome_protocol.py`
 
-Pure functions over bytes. No sockets, no Indigo, no clock. Given a colour it returns the message to send; given fourteen bytes it returns a decoded state or `None`.
+Pure functions over bytes. No sockets, no Indigo, no clock. Given a colour it returns the message to send. Given fourteen bytes it returns a decoded state or `None`.
 
 Every fact in it was measured — see [PROTOCOL.md](PROTOCOL.md). It carries the model table, and the model table is the reason it exists as a separate layer: which message shape a controller takes, and whether it can drive colour and white at once, are facts about the hardware, not decisions the transport should be making.
 
@@ -76,7 +82,7 @@ The last step of the plan restores whatever the light was showing beforehand, an
 
 ### Addressing
 
-A device is addressed by **MAC**, resolved to an IP through discovery. These controllers take a DHCP lease and move; an IP typed into a dialog is correct exactly until the router says otherwise.
+A device is addressed by **MAC**, resolved to an IP through discovery. These controllers take a DHCP lease and move, so an IP typed into a dialog is correct exactly until the router says otherwise.
 
 Two consequences that were both live bugs before they were fixed:
 
@@ -97,8 +103,8 @@ It turned out to be the second — an open colour picker orphaned by a plugin re
 
 ## Tests
 
-187 of them, in four files. `tests/indigo_stub.py` provides just enough of the `indigo` module that the **shipped** `plugin.py` can be imported and its real methods called — a re-implementation in the test file would only ever test the re-implementation.
+More than 200 of them, in five files. `tests/indigo_stub.py` provides just enough of the `indigo` module that the **shipped** `plugin.py` can be imported and its real methods called — a re-implementation in the test file would only ever test the re-implementation.
 
 Every protocol fixture is a byte string captured from a real controller, not one composed to match the parser. A fixture built from an assumption tests the assumption, and green tests over a wrong fixture are the most convincing available way to be wrong.
 
-That is not a claim that the tests are sufficient. When this plugin was first pointed at real hardware it had 165 green tests, and the hardware immediately found seven bugs — in every case because the fixture and the code shared the same wrong assumption. Two of them would have read as "the plugin randomly stops working". The tests stop regressions; they do not establish that it works.
+That is not a claim that the tests are sufficient. When this plugin was first pointed at real hardware it had 165 green tests, and the hardware immediately found seven bugs — in every case because the fixture and the code shared the same wrong assumption. Two of them would have read as "the plugin randomly stops working". The tests stop regressions. They do not establish that it works.

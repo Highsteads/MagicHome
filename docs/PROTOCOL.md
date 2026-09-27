@@ -1,3 +1,9 @@
+---
+title: The wire protocol
+parent: Technical notes
+nav_order: 1
+---
+
 # The Zengge / Magic Home wire protocol
 
 Everything here was measured against a live controller and checked by reading the state back. Where a published library and the hardware disagreed, the hardware won and the disagreement is noted.

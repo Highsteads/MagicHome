@@ -1,124 +1,61 @@
-# MagicHome
+# Magic Home for Indigo
 
-**Version:** 1.1.5
-An Indigo plugin for Zengge WiFi LED controllers — the ones sold under **Magic Home**, **Magic Hue**, **FVTLED**, **LEDENET** and a dozen other names, and set up with the Magic Home Pro app.
+**Control Magic Home wifi LED lights from Indigo, straight over your home network.**
 
-It talks to them directly on your own network. No cloud account, no app running in the background, no credentials to store anywhere.
+**Version:** 1.1.5 | **Author:** CliveS & Claude | **Needs:** Indigo 2022.1 or later, and a Magic Home controller on your wifi
 
-> ### Check this first — it takes ten seconds
->
-> These lights come in **two incompatible kinds**, and only one of them is reachable from Indigo.
->
-> **Turn Bluetooth off on your phone, stay on your home wifi, and open the Magic Home app.**
->
-> - **The lights still work** → a wifi controller. This plugin will drive it.
-> - **The app cannot find them** → a Bluetooth-only controller. **This plugin cannot reach it, and nor can any other Indigo plugin.** Nothing on your network can see it, because it is not on your network.
->
-> Some recent Zengge hardware — the `LEDnetWF` family and various BL602-based controllers — dropped the wifi protocol entirely. There is no setting to turn it back on and no workaround.
+**[Read the full guide](https://highsteads.github.io/MagicHome/)** — setting up, what everything means, and what to do when something goes wrong.
 
-## What you get
+---
 
-- A native Indigo **dimmer** device, so the standard brightness slider and colour picker just work, along with everything that already understands a dimmer — control pages, triggers, schedules, HomeKit bridges, Alexa.
-- **Discovery by MAC address**, so a controller keeps working when your router hands it a different IP.
-- The controller's own **20 built-in patterns**, and **custom patterns** of up to 16 colours that the controller stores and cycles by itself.
-- **Plugin-driven effects** the controller cannot do on its own: smooth fades, slow colour drift around a palette, and a sunrise that climbs a perceptual ramp rather than a straight line.
+## Check this first
 
-## What it works with
+These lights come in two kinds, and only one of them can be reached from Indigo.
 
-Any controller that answers on TCP 5577 — bulbs, strip controllers and the deck-light controllers sold with kits. The plugin reads the model the controller reports and adjusts what it sends.
+**Turn Bluetooth off on your phone, stay on your home wifi, and open the Magic Home app.**
 
-Developed against a **FVTLED / Zengge RGBW controller** (hardware `AK001-ZJ21413`, model byte `0x06`, firmware v4). Other models are supported from a table of known types; an unrecognised one is driven with the common message shape and says so in the log rather than pretending it was recognised.
+- **If the lights still work,** you have a wifi controller, and this plugin will drive it.
+- **If the app cannot find them,** you have a Bluetooth-only controller. This plugin cannot reach it, and nor can any other Indigo plugin, because it is not on your network at all.
 
-**Bluetooth-only controllers are not supported** — see the check at the top. If your lights only answer over Bluetooth they are not on your network at all, so there is nothing for this plugin to talk to.
+Some recent Zengge hardware — the `LEDnetWF` family and various controllers built on the BL602 chip — has no wifi control at all. There is no setting that turns it on.
 
-## A word about white
+## What it does
 
-An RGBW controller has **one** white channel, and it is the warm one. What the app offers as "cool white" is red, green and blue driven together — there is no second white channel to address. The plugin does the same thing, and gives you both as separate actions so you can pick.
+This plugin lets [Indigo](https://www.indigodomo.com) control the wifi LED controllers made by Zengge, sold under names such as **Magic Home**, **Magic Hue**, **FVTLED** and **LEDENET**, and set up with the Magic Home Pro app. It talks to each one directly over your home network, so there is no cloud account, no app running in the background and no password to store.
 
-The two are mutually exclusive on this hardware: the fixture shows its colour channels or its white one, never both. Asking for both applies whichever you evidently wanted, and says so once in the log.
+- **Makes each controller an ordinary Indigo dimmer,** so the brightness slider and colour picker work, along with control pages, triggers, schedules and anything else that understands a dimmer.
+- **Finds each controller by the number it was made with,** so when your router gives it a new network address the plugin finds it again by itself.
+- **Runs the controller's own 20 built-in patterns,** and loads your own pattern of up to 16 colours, which the controller stores and cycles by itself.
+- **Adds effects the controller cannot do on its own** — a smooth fade, a slow drift round a set of colours, a sunrise over as many minutes as you like, and a short flash that puts the previous colour back.
+- **Gives you warm white and cool white as separate actions.** An RGBW controller has one white channel, the warm one, and the app makes cool white by turning red, green and blue up together. The plugin does the same, so you can choose.
+- **Runs a short demo** of each colour channel and both whites, then puts the light back as it was, so you can check a new strip is wired the way you expect.
+
+## Which controllers it works with
+
+Any Magic Home controller on your wifi — strip controllers, bulbs and the controllers sold with deck-light kits. The plugin reads the kind of controller from the controller itself and adjusts what it sends to suit. I wrote it for an FVTLED RGBW controller and have tested it on that one. A controller it does not recognise is treated as the commonest kind, RGBW, and the Event Log says so.
 
 ## Installing
 
-1. Go to the [Releases page](https://github.com/Highsteads/MagicHome/releases) and download `MagicHome.indigoPlugin.zip`
+1. Go to the [Releases page](https://github.com/Highsteads/MagicHome/releases/latest) and download `MagicHome.indigoPlugin.zip`
 2. Unzip the downloaded file — you will get `MagicHome.indigoPlugin`
 3. Double-click `MagicHome.indigoPlugin` — Indigo will install it automatically
 
-## Setting up a light
+## Setting it up
 
-1. **Plugins -> MagicHome -> Discover Controllers.** Every controller on your network answers with its address, and they are listed in the Indigo log.
-2. **New Device -> MagicHome -> Magic Home Light.**
-3. Leave the finding method on **Discovery** and pick your controller from the list. It is named by the last six characters of its MAC address, the same way the Magic Home app names it.
-4. Save. The device fills in straight away.
-5. Optional, but worth it: **Plugins → MagicHome → Configure**, pick the light and press **Run Demo**. It runs through the three colour channels one at a time, both whites and a fade, then puts the light back exactly as it was — about fifteen seconds. Showing the channels separately is how you spot a strip wired in a different order, and showing both whites is how the warm/cool business stops being a surprise.
+1. Choose **Plugins → MagicHome → Discover Controllers**. Every controller on the same part of your network as Indigo is listed in the Event Log.
+2. Create a **New Device**, choose **MagicHome** and **Magic Home Light**, leave **Find the controller by** on **Discovery**, and pick your controller from the list. It is named by the last six characters of its MAC address, the same way the Magic Home app names it.
+3. Click **Save**, and the light shows its state within a few seconds.
+4. Open **Plugins → MagicHome → Configure**, choose the light under **Demo this light** and click **Run Demo** to see it show each colour and both whites.
 
-The controller must be on the same subnet as your Indigo server for discovery to find it. If you would rather pin an address, switch to **A fixed IP address** — but give the controller a DHCP reservation on your router first, or the device will stop working the day its lease changes.
+The [full guide](https://highsteads.github.io/MagicHome/) goes through each step, explains every setting and action, and covers what to do if something does not work.
 
-## Actions
+## What's new
 
-| Action | What it does |
-|---|---|
-| Set Warm White | Drives the dedicated white channel |
-| Set Cool White | Drives red, green and blue together, as the app does |
-| Run Built-in Pattern | One of the controller's own 20 patterns, at a speed you choose |
-| Load Custom Pattern | Up to 16 colours, stored in the controller and cycled by it |
-| Fade To Colour | A smooth fade over as long as you like |
-| Start Colour Drift | Wanders around a palette, holding each colour and crossfading |
-| Start Sunrise | Ember to daylight over minutes, on a perceptual ramp |
-| Flash | A short attention-getter that puts the previous colour back |
-| Stop Effect | Stops a plugin-driven effect and leaves the lights be |
+**v1.1.5** — The plugin carries a note of where its code lives on GitHub, the same way other Indigo plugins do. Nothing else changed.
 
-Palettes are written as `R,G,B` triples separated by a slash — `255,140,60 / 200,60,120 / 60,90,200`.
+**v1.1.4** — A line of unused code was removed. Nothing you would notice changed.
 
-### Built-in patterns against plugin effects
-
-The **built-in patterns** run on the controller. Fire one and the network goes quiet — nothing further crosses it, and they carry on through an Indigo restart. They are also strobes and hard jumps, which suit a party rather than a shelf.
-
-The **plugin effects** are computed here and streamed as ordinary colour commands. They can be as slow and as smooth as you want — a twenty-second crossfade, a fifteen-minute sunrise — at the cost of a steady trickle of traffic while they run, and they stop if the plugin does.
-
-Any manual command stops a running effect, so grabbing the brightness slider always wins.
-
-## Settings
-
-| Setting | Default | Notes |
-|---|---|---|
-| Poll interval | 15s | How often each controller is asked what it is doing |
-| Look for controllers at startup | on | |
-| Re-check addresses | 15 min | Finds a controller its DHCP lease has moved |
-| Effect smoothness | 20/sec | Measured ceiling is about 40; above 25 commands start being dropped |
-| Debug logging | off | |
-
-The Configure dialog also carries a **Run Demo** button, and there is a **Run Demo** item in the plugin's menu that demos every light you have.
-
-## How it talks to the controller
-
-Worth knowing if you are ever debugging it.
-
-- **TCP 5577** carries commands and state. There is no authentication of any kind, so anything on your network can drive the lights. That is an argument for keeping these controllers on an IoT VLAN.
-- **UDP 48899** is discovery. A broadcast of `HF-A11ASSISTHREAD` makes every controller answer with its IP, MAC and hardware id.
-- Messages are a few bytes with a plain sum as a checksum. **A message of the wrong length is not rejected — it is read as a different command.** The 9-byte form sent to an 8-byte controller switched a live unit off. The plugin keeps a table of which models take which.
-- Controllers **push their own state unprompted**, wrapped in a `b0 b1 b2 b3` header. One reply per request is not a safe assumption, so every state read scans for a frame and checks its checksum rather than trusting what arrives.
-- Sending a colour to a controller that is off **turns it on**.
-
-## Documentation
-
-| | |
-|---|---|
-| [Protocol reference](docs/PROTOCOL.md) | The wire protocol, measured against real hardware — framing, commands, state, discovery, model table, and the several places where the published accounts and the controller disagree |
-| [Architecture](docs/ARCHITECTURE.md) | How the plugin is built and why, including the timer-slack problem that shapes the effects engine |
-| [Scripting](docs/SCRIPTING.md) | Driving it from Indigo Python, with worked examples |
-| [Troubleshooting](docs/TROUBLESHOOTING.md) | When it does not do what you expected |
-
-## Troubleshooting in brief
-
-**Discovery finds nothing.** The controller must be on the same subnet as the Indigo server — a broadcast does not cross a router. Run the sweep again before concluding anything; UDP broadcast on wifi is genuinely lossy.
-
-**The device says offline.** Compare its address state against what Discover Controllers reports. A device set to discovery heals itself within a minute or two; one pinned to a fixed IP that has moved will not.
-
-**Colours are wrong.** Strip controllers can be wired in any channel order — a strip wired GRB shows red where you asked for green. That is the wiring, and the Magic Home app has a setting for it.
-
-**An effect stutters.** Lower the effect smoothness. Commands sent faster than the controller accepts are dropped rather than queued.
-
-The [full troubleshooting guide](docs/TROUBLESHOOTING.md) covers the rest.
+Every version is listed in the [version history](https://highsteads.github.io/MagicHome/changelog.html). The technical detail — the wire protocol, how the plugin is built, and driving it from a Python script — is in the guide's [technical notes](https://highsteads.github.io/MagicHome/technical-notes.html).
 
 ## Authors & licence
 
