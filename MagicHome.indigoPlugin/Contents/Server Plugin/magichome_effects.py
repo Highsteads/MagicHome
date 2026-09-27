@@ -182,15 +182,22 @@ def plan_sunrise(duration, fps=DEFAULT_FPS, ember=(60, 6, 0), peak=(255, 170, 90
     return plan
 
 
-def plan_flash(rgb, times=3, on=0.4, off=0.4, restore_rgb=None):
-    """A short attention-getter — a doorbell or an alert, not a party strobe."""
+def plan_flash(rgb, times=3, on=0.4, off=0.4, restore_rgb=None, restore_white=None):
+    """A short attention-getter — a doorbell or an alert, not a party strobe.
+
+    Ends on restore_white (the white channel) when given, else on restore_rgb.
+    A light that was showing white reports its colour channels as zero, so
+    restoring its "colour" would leave it dark.
+    """
     times = max(1, min(int(times or 1), 20))
     plan  = []
     dark  = (0, 0, 0)
     for _ in range(times):
         plan.append(Step(rgb=tuple(_clamp_byte(c) for c in rgb), white=None, hold=on))
         plan.append(Step(rgb=dark, white=None, hold=off))
-    if restore_rgb is not None:
+    if restore_white is not None:
+        plan.append(Step(rgb=None, white=_clamp_byte(restore_white), hold=0.0))
+    elif restore_rgb is not None:
         plan.append(Step(rgb=tuple(_clamp_byte(c) for c in restore_rgb),
                          white=None, hold=0.0))
     return plan

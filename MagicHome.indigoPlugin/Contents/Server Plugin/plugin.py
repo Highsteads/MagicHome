@@ -3,9 +3,12 @@
 # Filename:    plugin.py
 # Description: MagicHome — direct local control of Zengge / Magic Home WiFi
 #              LED controllers, with no cloud account and no app
-# Author:      CliveS & Claude Fable 5.1
-# Date:        11-09-2026 21:55
-# Version:     1.1.5
+# Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5
+# Date:        27-09-2026 10:23
+# Version:     1.2.0
+#              1.2.0 (Claude Opus 5.5): each light's white setting and poll
+#              interval now work; Flash puts a white light back on white;
+#              colour+white together is explained once per light.
 import os as _os
 import sys as _sys
 
@@ -35,7 +38,7 @@ except ImportError:                                     # pragma: no cover
             return False
         return default
 
-PLUGIN_VERSION = "1.1.5"
+PLUGIN_VERSION = "1.2.0"
 
 DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
@@ -136,6 +139,7 @@ class Plugin(indigo.PluginBase):
             "discovered":     {},      # normalised MAC -> Discovered
             "last_discovery": 0.0,
             "next_poll":      {},      # dev.id -> epoch seconds
+            "told_one_or_other": set(),  # dev.ids already told colour OR white
         }
 
         self.poll_interval      = DEFAULT_POLL_INTERVAL
@@ -189,7 +193,7 @@ class Plugin(indigo.PluginBase):
         # leave the plugin running on values startup would have rejected.
         self._read_prefs(valuesDict)
         self.logger.info(
-            f"Settings saved — polling every {self.poll_interval}s, "
+            f"Settings saved — polling every {self.poll_interval}s by default, "
             f"effects at {self.effect_fps} updates/second")
 
     def validatePrefsConfigUi(self, valuesDict):
@@ -282,6 +286,7 @@ class Plugin(indigo.PluginBase):
             controller.close()
         self.store["hue"].pop(dev.id, None)
         self.store["next_poll"].pop(dev.id, None)
+        self.store["told_one_or_other"].discard(dev.id)
 
     def validateDeviceConfigUi(self, valuesDict, typeId, devId):
         errors = indigo.Dict()
@@ -296,11 +301,28 @@ class Plugin(indigo.PluginBase):
             if not str(valuesDict.get("mac", "")).strip():
                 errors["mac"] = ("Pick a controller. If the list is empty, run "
                                  "Plugins -> MagicHome -> Discover Controllers first.")
-        if as_int(valuesDict.get("pollInterval"), 0) < MIN_POLL_INTERVAL:
-            errors["pollInterval"] = f"Use {MIN_POLL_INTERVAL} seconds or more."
+        # Blank is allowed on a light: it means "use the plugin's default".
+        poll = str(valuesDict.get("pollInterval", "")).strip()
+        if poll and as_int(poll, 0) < MIN_POLL_INTERVAL:
+            errors["pollInterval"] = (f"Use {MIN_POLL_INTERVAL} seconds or more, or leave it "
+                                      f"blank to use the plugin's default.")
         if errors:
             return (False, valuesDict, errors)
         return (True, valuesDict)
+
+    def _poll_interval_for(self, dev):
+        """How often to check this light: its own setting, else the plugin's.
+
+        A blank box means "use the plugin's Default poll interval", and so does
+        anything that is not a number, rather than stopping the poll.
+        """
+        return as_int(dev.pluginProps.get("pollInterval", ""), self.poll_interval,
+                      MIN_POLL_INTERVAL, 3600)
+
+    @staticmethod
+    def _white_is_cool(dev):
+        """True when this light's "White" setting is red, green and blue together."""
+        return str(dev.pluginProps.get("whiteMode", "warm")).strip().lower() == "cool"
 
     def _address_for(self, dev, props=None):
         """Work out where this controller is right now."""
@@ -383,7 +405,7 @@ class Plugin(indigo.PluginBase):
                                 self._poll_device(dev)
                         except Exception:
                             self.logger.exception(f"Polling \"{dev.name}\" failed")
-                            self.store["next_poll"][dev.id] = now + self.poll_interval
+                            self.store["next_poll"][dev.id] = now + self._poll_interval_for(dev)
                 except Exception:
                     self.logger.exception("MagicHome worker tick failed")
 
@@ -453,10 +475,10 @@ class Plugin(indigo.PluginBase):
             # startup was previously dead until the next re-check fifteen
             # minutes later, or until somebody noticed and edited the device.
             if not self._try_to_find_address(dev, controller):
-                self.store["next_poll"][dev.id] = self._now() + self.poll_interval
+                self.store["next_poll"][dev.id] = self._now() + self._poll_interval_for(dev)
                 return
         state = controller.read_state(force=force)
-        self.store["next_poll"][dev.id] = self._now() + self.poll_interval
+        self.store["next_poll"][dev.id] = self._now() + self._poll_interval_for(dev)
         self._publish(dev, state, controller)
 
     # -- state publishing ---------------------------------------------------
@@ -483,12 +505,20 @@ class Plugin(indigo.PluginBase):
         model = state.model
         runner = self.store["effects"].get(dev.id)
 
+        # A light set to "Cool" white shows white as red, green and blue at one
+        # level, so that is white on this fixture, and its level is the white
+        # level. Otherwise the white slider would fall back to zero at the
+        # next check, because the white channel itself is genuinely off.
+        cool_white = False
         if state.is_preset:
             mode = f"Pattern: {state.preset_name}"
         elif state.mode == proto.MODE_CUSTOM:
             mode = "Custom pattern"
         elif state.is_white_mode:
             mode = "White"
+        elif self._white_is_cool(dev) and state.red == state.green == state.blue > 0:
+            mode = "White"
+            cool_white = True
         else:
             mode = "Colour"
 
@@ -515,7 +545,7 @@ class Plugin(indigo.PluginBase):
         # values rather than reporting zeros.
         keep_last_colour = state.is_white_mode and not any(state.rgb)
 
-        channels = [("whiteLevel", state.white)]
+        channels = [("whiteLevel", state.red if cool_white else state.white)]
         if not keep_last_colour:
             channels += [("redLevel",   state.red),
                          ("greenLevel", state.green),
@@ -770,9 +800,16 @@ class Plugin(indigo.PluginBase):
         # Asking for white means white; asking for colour means colour. Sending
         # both where the model does not honour it produces neither.
         if white_asked and white and not any((red, green, blue)):
-            ok = controller.set_warm_white(white)
-            shown = f"white {to_percent(white)}"
+            # "White" means whichever white this light is set to use.
+            if self._white_is_cool(dev):
+                ok = controller.set_cool_white(white)
+                shown = f"cool white {to_percent(white)}"
+            else:
+                ok = controller.set_warm_white(white)
+                shown = f"white {to_percent(white)}"
         else:
+            if white_asked and white:
+                self._say_colour_or_white_once(dev, controller)
             ok = controller.set_colour(red, green, blue)
             shown = f"{to_percent(red)}, {to_percent(green)}, {to_percent(blue)}"
 
@@ -785,6 +822,33 @@ class Plugin(indigo.PluginBase):
         self.logger.info(f"sent \"{dev.name}\" set colour to {shown}")
         self.store["hue"][dev.id] = self._normalise_hue((red, green, blue))
         self.store["next_poll"][dev.id] = 0.0
+
+    def _say_colour_or_white_once(self, dev, controller):
+        """Explain, once per light, why asking for colour AND white gave colour.
+
+        Only said for a controller that cannot show both at once. Said more
+        than once it becomes noise, and said never the white simply fails to
+        come on with nothing to say why.
+        """
+        model = proto.model_for(controller.model_num or 0x06)
+        if model.honours_both or dev.id in self.store["told_one_or_other"]:
+            return
+        self.store["told_one_or_other"].add(dev.id)
+        self.logger.info(f"\"{dev.name}\" shows colour or white, not both at once. "
+                         f"You asked for both, so it is showing the colour. "
+                         f"This is said once for each light.")
+
+    def _restore_point(self, dev):
+        """What the light is showing now, as (rgb, white), with one of them None.
+
+        In white mode the controller reports its colour channels as zero, so
+        "put back the colour" on a white light would mean putting back black.
+        """
+        controller = self.store["controllers"].get(dev.id)
+        state = controller.last_state if controller is not None else None
+        if state is not None and state.is_white_mode:
+            return None, state.white
+        return self._current_rgb(dev), None
 
     # -- plugin actions -----------------------------------------------------
 
@@ -916,12 +980,15 @@ class Plugin(indigo.PluginBase):
                as_int(action.props.get("green", 0), 0, 0, 255),
                as_int(action.props.get("blue", 0), 0, 0, 255))
         times = as_int(action.props.get("times", 3), 3, 1, 20)
-        restore = self._current_rgb(dev) if as_bool(action.props.get("restore", True), True) else None
+        restore_rgb = restore_white = None
+        if as_bool(action.props.get("restore", True), True):
+            restore_rgb, restore_white = self._restore_point(dev)
 
         if not dev.onState:
             self.store["controllers"][dev.id].turn_on()
 
-        plan = fx.plan_flash(rgb, times=times, restore_rgb=restore)
+        plan = fx.plan_flash(rgb, times=times, restore_rgb=restore_rgb,
+                             restore_white=restore_white)
         if self._start_effect(dev, "flash", plan):
             self.logger.info(f"\"{dev.name}\" flashing {times} time(s)")
 
@@ -1066,10 +1133,10 @@ class Plugin(indigo.PluginBase):
         first click.
         """
         return [
-            ("Poll interval:",    f"{self.poll_interval}s"),
-            ("Effect rate:",      f"{self.effect_fps}/second"),
-            ("Controllers seen:", str(len(self.store["discovered"]))),
-            ("Devices:",          str(len(list(indigo.devices.iter("self.magicHomeLight"))))),
+            ("Default poll interval:", f"{self.poll_interval}s"),
+            ("Effect rate:",           f"{self.effect_fps}/second"),
+            ("Controllers seen:",      str(len(self.store["discovered"]))),
+            ("Devices:",               str(len(list(indigo.devices.iter("self.magicHomeLight"))))),
         ]
 
     def test_connection(self, valuesDict=None, typeId=None):

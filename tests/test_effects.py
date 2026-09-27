@@ -156,6 +156,12 @@ class TestFlashPlan(unittest.TestCase):
         plan = fx.plan_flash((255, 0, 0), times=2, restore_rgb=(1, 2, 3))
         self.assertEqual(plan[-1].rgb, (1, 2, 3))
 
+    def test_a_light_that_was_white_is_put_back_on_white(self):
+        # A light showing white reports its colour channels as zero, so
+        # restoring the "colour" would leave it dark.
+        plan = fx.plan_flash((255, 0, 0), times=2, restore_rgb=(0, 0, 0), restore_white=200)
+        self.assertEqual((plan[-1].rgb, plan[-1].white), (None, 200))
+
     def test_an_absurd_count_is_capped(self):
         self.assertLessEqual(len(fx.plan_flash((1, 1, 1), times=9999)), 40)
 

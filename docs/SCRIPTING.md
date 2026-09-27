@@ -32,7 +32,8 @@ Indigo works in 0-100 per channel, not 0-255.
 # amber
 indigo.dimmer.setColorLevels(DEV, redLevel=100, greenLevel=55, blueLevel=24)
 
-# the white channel — the warm one
+# white — the warm channel, or red, green and blue together if the light's
+# "White" setting is Cool
 indigo.dimmer.setColorLevels(DEV, redLevel=0, greenLevel=0, blueLevel=0, whiteLevel=100)
 ```
 

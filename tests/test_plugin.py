@@ -606,7 +606,7 @@ class TestBannerExtras(unittest.TestCase):
         self.assertTrue(lines, "the banner produced nothing")
         self.assertTrue(lines[-1].startswith("="),
                         "no closing bar — the banner threw part way through")
-        self.assertTrue(any("Poll interval:" in ln for ln in lines))
+        self.assertTrue(any("Default poll interval:" in ln for ln in lines))
 
     def test_a_string_extras_list_would_still_be_caught(self):
         # Guards the guard: prove the check above can actually fail.
@@ -812,6 +812,189 @@ class TestDeviceConfigValidation(unittest.TestCase):
             {"addressMode": "discover", "mac": "806A34112233", "pollInterval": "15"},
             "magicHomeLight", 1)
         self.assertTrue(result[0])
+
+    def test_a_blank_poll_interval_is_allowed_on_a_light(self):
+        # Blank means "use the plugin's default".
+        p = make_plugin()
+        result = p.validateDeviceConfigUi(
+            {"addressMode": "discover", "mac": "806A34112233", "pollInterval": ""},
+            "magicHomeLight", 1)
+        self.assertTrue(result[0])
+
+    def test_a_too_fast_poll_on_a_light_is_still_refused(self):
+        p = make_plugin()
+        ok, _v, errors = p.validateDeviceConfigUi(
+            {"addressMode": "discover", "mac": "806A34112233", "pollInterval": "2"},
+            "magicHomeLight", 1)
+        self.assertFalse(ok)
+        self.assertIn("pollInterval", errors)
+
+
+class TestPerLightPollInterval(unittest.TestCase):
+    """Each light's "Check the controller every" box was never read, so every
+    light was checked at the plugin-wide rate whatever it said."""
+
+    def _next_gap(self, plugin_prefs, light_value):
+        p = make_plugin(plugin_prefs)
+        p._now = lambda: 1000.0
+        dev = FakeDevice(props={"pollInterval": light_value})
+        wire(p, dev)
+        p._poll_device(dev)
+        return p.store["next_poll"][dev.id] - 1000.0
+
+    def test_a_lights_own_interval_is_used(self):
+        self.assertEqual(self._next_gap({"pollInterval": "15"}, "60"), 60)
+
+    def test_a_blank_box_uses_the_plugin_default(self):
+        self.assertEqual(self._next_gap({"pollInterval": "45"}, ""), 45)
+
+    def test_rubbish_in_the_box_uses_the_plugin_default_rather_than_stopping(self):
+        self.assertEqual(self._next_gap({"pollInterval": "45"}, "often"), 45)
+
+    def test_a_too_fast_value_is_raised_to_the_minimum(self):
+        self.assertEqual(self._next_gap({}, "1"), plug.MIN_POLL_INTERVAL)
+
+    def test_a_light_still_hunting_for_its_address_waits_its_own_interval(self):
+        p = make_plugin({"pollInterval": "15"})
+        p._now = lambda: 1000.0
+        dev = FakeDevice(props={"addressMode": "manual", "ipAddress": "",
+                                "pollInterval": "90"})
+        wire(p, dev, controller=FakeController(ip=""))
+        p._poll_device(dev)
+        self.assertEqual(p.store["next_poll"][dev.id] - 1000.0, 90)
+
+
+def _state_with_rgb(red, green, blue):
+    raw = bytearray(REAL_RED.raw)
+    raw[6], raw[7], raw[8] = red, green, blue
+    raw[13] = proto.checksum(raw[:13])
+    return proto.parse_state(bytes(raw))
+
+
+class TestWhiteSetting(unittest.TestCase):
+    """"White on this fixture means" was never read, so Indigo's white slider
+    always drove the warm channel whatever the light was set to."""
+
+    def test_cool_setting_sends_the_white_slider_to_cool_white(self):
+        p, dev = make_plugin(), FakeDevice(props={"whiteMode": "cool"})
+        ctrl = wire(p, dev)
+        p._set_colour_levels(dev, {"redLevel": 0, "greenLevel": 0, "blueLevel": 0,
+                                   "whiteLevel": 100})
+        self.assertEqual(call_of(ctrl, "cool"), ("cool", 255))
+        self.assertIsNone(call_of(ctrl, "warm"))
+
+    def test_warm_setting_sends_the_white_slider_to_the_white_channel(self):
+        p, dev = make_plugin(), FakeDevice(props={"whiteMode": "warm"})
+        ctrl = wire(p, dev)
+        p._set_colour_levels(dev, {"redLevel": 0, "greenLevel": 0, "blueLevel": 0,
+                                   "whiteLevel": 100})
+        self.assertEqual(call_of(ctrl, "warm"), ("warm", 255))
+        self.assertIsNone(call_of(ctrl, "cool"))
+
+    def test_cool_white_reads_back_as_white_at_its_level(self):
+        # Otherwise the white slider falls back to zero at the next check.
+        p, dev = make_plugin(), FakeDevice(props={"whiteMode": "cool"})
+        ctrl = wire(p, dev)
+        p._publish(dev, _state_with_rgb(128, 128, 128), ctrl)
+        self.assertEqual(dev.states["mode"], "White")
+        self.assertEqual(dev.states["whiteLevel"], 50)
+
+    def test_the_same_reading_on_a_warm_light_is_colour(self):
+        p, dev = make_plugin(), FakeDevice(props={"whiteMode": "warm"})
+        ctrl = wire(p, dev)
+        p._publish(dev, _state_with_rgb(128, 128, 128), ctrl)
+        self.assertEqual(dev.states["mode"], "Colour")
+        self.assertEqual(dev.states["whiteLevel"], 0)
+
+    def test_a_real_colour_on_a_cool_light_is_still_colour(self):
+        p, dev = make_plugin(), FakeDevice(props={"whiteMode": "cool"})
+        ctrl = wire(p, dev)
+        p._publish(dev, REAL_RED, ctrl)
+        self.assertEqual(dev.states["mode"], "Colour")
+
+
+class _CapturingRunner(object):
+    name    = ""
+    running = False
+    last_step = None
+
+    def __init__(self):
+        self.steps = None
+
+    def stop(self, wait=True, timeout=3.0):
+        return True
+
+    def start(self, name, steps, on_finish=None, on_step=None):
+        self.name, self.steps = name, list(steps)
+        return True
+
+
+class TestFlashRestore(unittest.TestCase):
+    """Flash with "Put the previous colour back" left a white light dark: the
+    colour channels read as zero in white mode, and zero is what went back."""
+
+    def _flash(self, state):
+        p, dev = make_plugin(), FakeDevice()
+        dev.states["onOffState"] = True
+        wire(p, dev, state=state)
+        runner = _CapturingRunner()
+        p.store["effects"][dev.id] = runner
+        p.action_flash(FakeAction(props={"times": "2", "restore": True}), dev)
+        return runner.steps
+
+    def test_a_white_light_goes_back_to_white(self):
+        last = self._flash(REAL_WHITE)[-1]
+        self.assertEqual((last.rgb, last.white), (None, 255))
+
+    def test_a_colour_light_goes_back_to_its_colour(self):
+        last = self._flash(REAL_RED)[-1]
+        self.assertEqual((last.rgb, last.white), ((255, 0, 0), None))
+
+    def test_unticked_it_is_left_as_the_flash_leaves_it(self):
+        p, dev = make_plugin(), FakeDevice()
+        dev.states["onOffState"] = True
+        wire(p, dev, state=REAL_WHITE)
+        runner = _CapturingRunner()
+        p.store["effects"][dev.id] = runner
+        p.action_flash(FakeAction(props={"times": "2", "restore": False}), dev)
+        self.assertEqual(len(runner.steps), 4)
+
+
+class TestColourAndWhiteTogether(unittest.TestCase):
+    """Asking for colour and white at once gives the colour, and the log says
+    why, once for each light."""
+
+    ASK_BOTH = {"redLevel": 100, "greenLevel": 0, "blueLevel": 0, "whiteLevel": 100}
+
+    def _count(self, logs):
+        return sum("not both at once" in line for line in logs.output)
+
+    def test_it_is_said_once_per_light(self):
+        p = make_plugin()
+        first, second = FakeDevice(dev_id=1), FakeDevice(dev_id=2, name="Hall Strip")
+        ctrl = wire(p, first)
+        wire(p, second)
+        with self.assertLogs(p.logger, level="INFO") as logs:
+            p._set_colour_levels(first, self.ASK_BOTH)
+            p._set_colour_levels(first, self.ASK_BOTH)
+            p._set_colour_levels(second, self.ASK_BOTH)
+        self.assertEqual(self._count(logs), 2)
+        self.assertEqual(call_of(ctrl, "colour")[:4], ("colour", 255, 0, 0))
+
+    def test_it_is_not_said_for_colour_alone(self):
+        p, dev = make_plugin(), FakeDevice()
+        wire(p, dev)
+        with self.assertLogs(p.logger, level="INFO") as logs:
+            p._set_colour_levels(dev, {"redLevel": 100, "greenLevel": 0, "blueLevel": 0})
+        self.assertEqual(self._count(logs), 0)
+
+    def test_it_is_not_said_for_a_controller_that_can_show_both(self):
+        p, dev = make_plugin(), FakeDevice()
+        ctrl = wire(p, dev)
+        ctrl.model_num = next(num for num, m in proto.MODELS.items() if m.honours_both)
+        with self.assertLogs(p.logger, level="INFO") as logs:
+            p._set_colour_levels(dev, self.ASK_BOTH)
+        self.assertEqual(self._count(logs), 0)
 
 
 if __name__ == "__main__":

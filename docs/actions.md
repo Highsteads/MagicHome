@@ -63,7 +63,7 @@ It starts from dark, and switches the light on if it was off.
 
 ## Flash
 
-Flashes the light in the **Red**, **Green** and **Blue** you choose, red to start with, the number of **Times** you choose, from 1 to 20. Each flash is on for under half a second and off for the same. With **Put the previous colour back afterwards** ticked, the light returns to the colour it showed before. It puts back a colour, not white, so a light that was showing white ends dark rather than white.
+Flashes the light in the **Red**, **Green** and **Blue** you choose, red to start with, the number of **Times** you choose, from 1 to 20. Each flash is on for under half a second and off for the same. With **Put the previous colour back afterwards** ticked, the light returns to what it showed before, its colour or, if it was showing white, its white at the same level.
 
 ## Stop Effect
 

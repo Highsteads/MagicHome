@@ -22,7 +22,7 @@ To settle which kind you have: **turn Bluetooth off on your phone, stay on your 
 
 Compare the device's `controllerAddress` state against what **Discover Controllers** reports.
 
-- **Set to discovery:** the plugin re-checks addresses on a timer, every 15 minutes by default, and moves the device to wherever its controller now answers. A device that has never been placed hunts for its controller once a minute. To pick up a move sooner, run **Discover Controllers** and then disable and re-enable the device. If none of that finds it, the controller is not answering at all.
+- **Set to discovery:** the plugin re-checks addresses on a timer, every 15 minutes by default, and moves the device to wherever its controller now answers. A device that has never been placed hunts for its controller at most once a minute. To pick up a move sooner, run **Discover Controllers** and then disable and re-enable the device. If none of that finds it, the controller is not answering at all.
 - **Pinned to a fixed IP:** it will sit offline until you correct the address or switch it to discovery. This is the failure a DHCP reservation prevents.
 
 `online` going False means the controller stopped answering. It does not mean the lights are off — the plugin leaves the on/off state alone rather than inventing one.
@@ -35,7 +35,7 @@ Strip controllers can be wired in any order, and a strip wired GRB shows red whe
 
 **Cool white looks like colour rather than white.** It is. An RGBW controller has one white channel and it is the warm one — the app's cool white is red, green and blue together, and this plugin does the same thing. If the result looks tinted, the strip's channels are not perfectly balanced, which is a property of the strip.
 
-**Asking for colour and white together only applies one of them.** On most RGBW controllers the fixture shows colour or white, never both. The plugin applies whichever you evidently wanted.
+**Asking for colour and white together only applies one of them.** On most RGBW controllers the fixture shows colour or white, never both. The plugin applies whichever you evidently wanted, which is the colour if any colour was asked for, and the Event Log says so the first time it happens on each light.
 
 ## Changing the colour does nothing, but on and off still work
 

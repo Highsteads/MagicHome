@@ -27,7 +27,7 @@ The controller has stopped answering. The light's **Online** state is off, but i
 
 ## A light shows "no address"
 
-The light is set to discovery and its controller has not answered yet. The plugin keeps looking, about once a minute. Check the controller has power, and run **Discover Controllers**.
+The light is set to discovery and its controller has not answered yet. The plugin keeps looking, about once a minute, or less often if the light is set to be checked less often than that. Check the controller has power, and run **Discover Controllers**.
 
 ## The colours are wrong
 
@@ -35,7 +35,7 @@ The light is set to discovery and its controller has not answered yet. The plugi
 
 **Cool white looks slightly coloured.** On an RGBW controller cool white is red, green and blue turned up together, as the app does it. If it looks tinted, the strip's three colours are not perfectly matched.
 
-**White and colour together only gives one of them.** Most RGBW controllers show their colour channels or their white channel, never both. If you ask for any colour, you get the colour.
+**White and colour together only gives one of them.** Most RGBW controllers show their colour channels or their white channel, never both. If you ask for any colour, you get the colour, and the Event Log says so the first time it happens on each light.
 
 ## Changing the colour does nothing, but on and off still work
 

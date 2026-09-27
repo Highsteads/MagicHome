@@ -28,17 +28,17 @@ A Magic Home Light is an ordinary Indigo dimmer with colour. You control it with
 | **Mode** | What the light is doing: **Colour**, **White**, **Custom pattern**, **Pattern:** followed by the name of a built-in pattern, or **unknown** when the controller is not answering. |
 | **Running Effect** | The plugin effect running on the light — **fade**, **drift**, **sunrise**, **flash** or **demo** — or **none**. |
 
-The plugin asks each controller what it is doing every 15 seconds to start with, and again straight after every command. While an effect runs, the light's colour in Indigo follows the effect as it goes.
+The plugin asks each controller what it is doing every 15 seconds to start with, or as often as the light's own **Check the controller every** setting says, and again straight after every command. While an effect runs, the light's colour in Indigo follows the effect as it goes.
 
 When a controller shows white, it reports its colour channels as zero. The plugin keeps the last colour in Indigo instead, so the colour picker opens on that colour rather than on black, and **Mode** says **White**.
 
 ## Warm white and cool white
 
-An RGBW controller — red, green, blue and white — has **one** white channel, and it is the warm one. What the Magic Home app calls cool white is red, green and blue turned up together, as there is no second white channel to use. The plugin does the same, and gives you **Set Warm White** and **Set Cool White** as separate actions so you can choose.
+An RGBW controller — red, green, blue and white — has **one** white channel, and it is the warm one. What the Magic Home app calls cool white is red, green and blue turned up together, as there is no second white channel to use. The plugin does the same, and gives you **Set Warm White** and **Set Cool White** as separate actions so you can choose. The light's **"White" on this fixture means** setting decides which of the two Indigo's own white slider gives.
 
 On a controller with two white channels, such as an RGBWW controller, **Set Cool White** uses the second white channel.
 
-Most RGBW controllers, including the one I wrote this for, show their colour channels **or** their white channel, never both at once. If you ask for white with red, green and blue all at zero, you get white. If you ask for any colour, you get the colour.
+Most RGBW controllers, including the one I wrote this for, show their colour channels **or** their white channel, never both at once. If you ask for white with red, green and blue all at zero, you get the white the light is set to use. If you ask for any colour, you get the colour, and the first time you ask one of these lights for colour and white together, the Event Log says why only the colour came on.
 
 ## Which controllers it knows
 

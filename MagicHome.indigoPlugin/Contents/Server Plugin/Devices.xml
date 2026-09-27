@@ -45,11 +45,14 @@
 				</List>
 			</Field>
 			<Field id="whiteModeLabel" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
-				<Label>An RGBW controller has one white channel, which is the warm one. The Magic Home app produces cool white by driving red, green and blue together — there is no second white channel to address.</Label>
+				<Label>This is what Indigo's white slider turns on. An RGBW controller has one white channel, which is the warm one. The Magic Home app produces cool white by driving red, green and blue together — there is no second white channel to address.</Label>
 			</Field>
 
-			<Field id="pollInterval" type="textfield" defaultValue="15">
+			<Field id="pollInterval" type="textfield" defaultValue="">
 				<Label>Check the controller every (seconds):</Label>
+			</Field>
+			<Field id="pollIntervalLabel" type="label" fontSize="small" alwaysUseInDialogHeightCalc="true">
+				<Label>5 or more. Leave blank to use the plugin's Default poll interval.</Label>
 			</Field>
 
 			<!-- Set from the model the controller reports, not guessed here. -->

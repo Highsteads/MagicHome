@@ -11,7 +11,7 @@ You do not need to know any of this to use the plugin. It is here for anyone who
 
 Indigo talks to each controller directly over your home network, on the controller's port 5577, with no account and no internet involved. The controller has no password of any kind, so anything on your network can switch these lights, which is a reason some people keep smart devices on a separate network of their own.
 
-Every so often — every 15 seconds to start with — the plugin asks each controller what it is showing, and brings Indigo up to date. It asks again straight after every command, so Indigo shows the result of what you did within a second or two.
+Every so often — every 15 seconds to start with, or at a light's own rate if you have set one — the plugin asks each controller what it is showing, and brings Indigo up to date. It asks again straight after every command, so Indigo shows the result of what you did within a second or two.
 
 If a controller does not answer, the plugin tries once more at once, because the commonest failure is a controller that has quietly closed an idle connection. If that fails too, the light is marked offline, and the plugin waits a little longer before each new try — five seconds, then ten, then twenty, and so on up to five minutes. It never stops trying, so a controller that comes back is found again within about five minutes at most. A command to a light that is offline and waiting between tries is not sent, and the Event Log says the send failed.
 

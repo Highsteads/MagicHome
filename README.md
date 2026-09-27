@@ -2,7 +2,7 @@
 
 **Control Magic Home wifi LED lights from Indigo, straight over your home network.**
 
-**Version:** 1.1.5 | **Author:** CliveS & Claude | **Needs:** Indigo 2022.1 or later, and a Magic Home controller on your wifi
+**Version:** 1.2.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2022.1 or later, and a Magic Home controller on your wifi
 
 **[Read the full guide](https://highsteads.github.io/MagicHome/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -51,9 +51,9 @@ The [full guide](https://highsteads.github.io/MagicHome/) goes through each step
 
 ## What's new
 
-**v1.1.5** — The plugin carries a note of where its code lives on GitHub, the same way other Indigo plugins do. Nothing else changed.
+**v1.2.0** — Two settings on each light that did nothing now work: which white Indigo's white slider gives, and how often the light is checked. Flash puts a light that was showing white back on white instead of leaving it dark, and the Event Log says once for each light why asking for colour and white together gives the colour.
 
-**v1.1.4** — A line of unused code was removed. Nothing you would notice changed.
+**v1.1.5** — The plugin carries a note of where its code lives on GitHub, the same way other Indigo plugins do. Nothing else changed.
 
 Every version is listed in the [version history](https://highsteads.github.io/MagicHome/changelog.html). The technical detail — the wire protocol, how the plugin is built, and driving it from a Python script — is in the guide's [technical notes](https://highsteads.github.io/MagicHome/technical-notes.html).
 
