@@ -7,6 +7,10 @@ nav_order: 9
 
 The newest version is at the top.
 
+## 1.3.0 — 27 September 2026
+
+A light that stops answering now stays marked **offline**, in red, until it answers again. Before, an effect running on it, or the plugin noticing it had moved to a new address, could clear the red while the light was still not answering, so the device list and Device Health Monitor could both show a dead light as fine.
+
 ## 1.2.0 — 27 September 2026
 
 - The **"White" on this fixture means** setting on each light now does what it says. Set it to **Cool** and Indigo's white slider gives red, green and blue together, the way the Magic Home app does, instead of always using the warm white channel. The light then shows **White** as its mode, and its white level stays where you put it.

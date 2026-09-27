@@ -72,6 +72,8 @@ The device is a native Indigo `dimmer` with `SupportsColor`, `SupportsRGB` and `
 
 **An unanswered query is published as unknown, not as off.** Recording it as off would invent a reading nobody took, and a dead controller would look like a light somebody had switched off.
 
+**Only the check that set an error may clear it.** Indigo clears a device's error on every state write unless told not to, so every write goes through `_write_state` / `_write_states` with `clearErrorState=False`. The "offline" error is lifted by `_publish` on a good reply and "no address" by `_try_to_find_address`. Before 1.3.0 an effect step or a moved address wiped "offline" while the controller was still silent.
+
 ### The demo
 
 **Run Demo** is built as an ordinary effect plan and handed to the same runner, rather than as a loop of its own with its own sleeps. It therefore inherits accurate pacing, stopping the instant a manual command arrives, and publishing what it is showing as it goes — none of which had to be written twice.

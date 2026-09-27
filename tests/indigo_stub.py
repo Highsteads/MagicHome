@@ -44,13 +44,21 @@ class FakeDevice(object):
     def brightness(self):
         return int(self.states.get("brightnessLevel", 0))
 
-    def updateStateOnServer(self, key, value, **kwargs):
+    # Like Indigo, a state write CLEARS the device's error unless told not to.
+    # A stub that never cleared it could not see a routine write wiping an
+    # "offline" verdict, which is the fault 1.3.0 fixed.
+    def updateStateOnServer(self, key, value, clearErrorState=True, **kwargs):
         self.states[key] = value
         self.updates.append((key, value))
+        if clearErrorState:
+            self.errorState = ""
 
-    def updateStatesOnServer(self, kv_list):
+    def updateStatesOnServer(self, kv_list, clearErrorState=True):
         for item in kv_list:
-            self.updateStateOnServer(item["key"], item["value"])
+            self.states[item["key"]] = item["value"]
+            self.updates.append((item["key"], item["value"]))
+        if clearErrorState:
+            self.errorState = ""
 
     def setErrorStateOnServer(self, value):
         self.errorState = value

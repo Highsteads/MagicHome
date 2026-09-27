@@ -2,7 +2,7 @@
 
 **Control Magic Home wifi LED lights from Indigo, straight over your home network.**
 
-**Version:** 1.2.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2022.1 or later, and a Magic Home controller on your wifi
+**Version:** 1.3.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2022.1 or later, and a Magic Home controller on your wifi
 
 **[Read the full guide](https://highsteads.github.io/MagicHome/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -50,6 +50,8 @@ Any Magic Home controller on your wifi — strip controllers, bulbs and the cont
 The [full guide](https://highsteads.github.io/MagicHome/) goes through each step, explains every setting and action, and covers what to do if something does not work.
 
 ## What's new
+
+**v1.3.0** — A light that stops answering now stays marked offline until it answers again. Before, an effect or a moved address could clear the red while the light was still silent, so Device Health Monitor could miss it.
 
 **v1.2.0** — Two settings on each light that did nothing now work: which white Indigo's white slider gives, and how often the light is checked. Flash puts a light that was showing white back on white instead of leaving it dark, and the Event Log says once for each light why asking for colour and white together gives the colour.
 

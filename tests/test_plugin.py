@@ -496,6 +496,78 @@ class TestEffectPublishing(unittest.TestCase):
         self.assertEqual(dev.states["brightnessLevel"], 100)
 
 
+class TestErrorStateSurvivesRoutineWrites(unittest.TestCase):
+    """Indigo clears a device's error on every state write unless told not to.
+
+    The plugin marks a light "offline" when it stops answering. Before 1.3.0 a
+    routine write made while it was still silent (an effect step, the effect
+    name, a moved address) wiped that, so Device Health Monitor, which reads
+    the error, could see a dead light as healthy. Only a good reply may lift it.
+    """
+
+    def _offline(self):
+        p, dev = make_plugin(), FakeDevice()
+        ctrl = wire(p, dev)
+        p._publish(dev, None, ctrl)
+        self.assertEqual(dev.errorState, "offline")
+        return p, dev, ctrl
+
+    def test_an_effect_step_keeps_the_offline_error(self):
+        import magichome_effects as fx
+        p, dev, _ = self._offline()
+        p._publish_step(dev, fx.Step(rgb=(255, 140, 60), white=None, hold=0))
+        self.assertEqual(dev.states["redLevel"], 100, "the step was still written")
+        self.assertEqual(dev.errorState, "offline")
+
+    def test_stopping_an_effect_keeps_the_offline_error(self):
+        p, dev, _ = self._offline()
+        runner = _NullRunner()
+        runner.running = True
+        p.store["effects"][dev.id] = runner
+        p._stop_effect(dev, "for a test")
+        self.assertEqual(dev.states["effect"], "none")
+        self.assertEqual(dev.errorState, "offline")
+
+    def test_a_moved_address_keeps_the_offline_error(self):
+        dev  = FakeDevice(props={"addressMode": "discover", "mac": "AABBCCDDEEFF"})
+        p    = make_plugin()
+        ctrl = wire(p, dev, controller=FakeController(ip="192.168.1.8"))
+        p._publish(dev, None, ctrl)
+        entry = proto.Discovered(ip="192.168.1.9", mac="AABBCCDDEEFF",
+                                 hardware_id="AK001", name="DDEEFF")
+        real, real_all = plug.mdev.discover, plug.indigo.devices.all
+        plug.mdev.discover = lambda **kw: [entry]
+        plug.indigo.devices.all = [dev]
+        try:
+            p._rediscover_and_repoint()
+        finally:
+            plug.mdev.discover = real
+            plug.indigo.devices.all = real_all
+        self.assertEqual(dev.states["controllerAddress"], "192.168.1.9")
+        self.assertEqual(dev.errorState, "offline", "only a good reply may clear it")
+
+    def test_a_good_reply_still_clears_it(self):
+        p, dev, ctrl = self._offline()
+        p._publish(dev, REAL_RED, ctrl)
+        self.assertEqual(dev.errorState, "")
+
+    def test_a_batch_write_that_refuses_the_argument_goes_one_at_a_time(self):
+        # The docs show clearErrorState only on the single-state call. If the
+        # batch call refuses it, the states must still land and the error stay.
+        class OldDevice(FakeDevice):
+            def updateStatesOnServer(self, kv_list):
+                for item in kv_list:
+                    self.updateStateOnServer(item["key"], item["value"])
+
+        p, dev = make_plugin(), OldDevice()
+        ctrl = wire(p, dev)
+        p._publish(dev, None, ctrl)
+        p._write_states(dev, [{"key": "effect", "value": "fade"}])
+        self.assertEqual(dev.states["effect"], "fade")
+        self.assertEqual(dev.errorState, "offline")
+        self.assertIs(p.store["batch_keeps_error"], False)
+
+
 class TestDemo(unittest.TestCase):
 
     def test_the_plan_shows_each_colour_channel_separately(self):

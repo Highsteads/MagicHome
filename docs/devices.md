@@ -62,7 +62,7 @@ A controller the plugin does not recognise is treated as an RGBW controller, whi
 
 ## When a controller cannot be reached
 
-If a controller stops answering, the light shows **offline** in red in the device list, **Online** turns off, **Mode** shows **unknown**, and the Event Log has one warning saying so. The on and off state is left as it was, because a controller that does not answer has not said it is off. When it answers again the red clears and the log says it is back, with its address.
+If a controller stops answering, the light shows **offline** in red in the device list, **Online** turns off, **Mode** shows **unknown**, and the Event Log has one warning saying so. The on and off state is left as it was, because a controller that does not answer has not said it is off. The red stays until the controller answers again, even if an effect is running or you send the light a command in the meantime. When it answers, the red clears and the log says it is back, with its address.
 
 A light that has never been found — one set to discovery whose controller did not answer — shows **no address** in red until the plugin finds it.
 

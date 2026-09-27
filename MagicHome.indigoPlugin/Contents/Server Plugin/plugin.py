@@ -4,8 +4,10 @@
 # Description: MagicHome — direct local control of Zengge / Magic Home WiFi
 #              LED controllers, with no cloud account and no app
 # Author:      CliveS & Claude Fable 5.1, Claude Opus 5.5
-# Date:        27-09-2026 10:23
-# Version:     1.2.0
+# Date:        27-09-2026 16:30
+# Version:     1.3.0
+#              1.3.0 (Claude Opus 5.5): a light marked offline stays marked
+#              until it answers; routine state writes no longer clear it.
 #              1.2.0 (Claude Opus 5.5): each light's white setting and poll
 #              interval now work; Flash puts a white light back on white;
 #              colour+white together is explained once per light.
@@ -38,7 +40,7 @@ except ImportError:                                     # pragma: no cover
             return False
         return default
 
-PLUGIN_VERSION = "1.2.0"
+PLUGIN_VERSION = "1.3.0"
 
 DEFAULT_POLL_INTERVAL = 15
 MIN_POLL_INTERVAL     = 5
@@ -140,6 +142,7 @@ class Plugin(indigo.PluginBase):
             "last_discovery": 0.0,
             "next_poll":      {},      # dev.id -> epoch seconds
             "told_one_or_other": set(),  # dev.ids already told colour OR white
+            "batch_keeps_error": None,   # does a batch write take clearErrorState?
         }
 
         self.poll_interval      = DEFAULT_POLL_INTERVAL
@@ -231,11 +234,11 @@ class Plugin(indigo.PluginBase):
             # Awaiting configuration is not a fault, so it is not logged as one.
             self.logger.info(f"\"{dev.name}\" has no address yet — run "
                              f"Plugins -> MagicHome -> Discover Controllers, then edit the device")
-            dev.updateStateOnServer("online", False)
+            self._write_state(dev, "online", False)
             dev.setErrorStateOnServer("no address")
             return
 
-        dev.updateStateOnServer("controllerAddress", ip)
+        self._write_state(dev, "controllerAddress", ip)
         self._poll_device(dev, force=True)
         self._assert_capabilities(dev, controller)
 
@@ -435,7 +438,7 @@ class Plugin(indigo.PluginBase):
         controller.failures = 0
         controller._retry_after = 0.0
         self.logger.info(f"\"{dev.name}\" found at {entry.ip}")
-        dev.updateStateOnServer("controllerAddress", entry.ip)
+        self._write_state(dev, "controllerAddress", entry.ip)
         dev.setErrorStateOnServer("")
         return True
 
@@ -461,7 +464,7 @@ class Plugin(indigo.PluginBase):
                 controller.ip = entry.ip
                 controller.failures = 0
                 controller._retry_after = 0.0
-                dev.updateStateOnServer("controllerAddress", entry.ip)
+                self._write_state(dev, "controllerAddress", entry.ip)
                 self.store["next_poll"][dev.id] = 0.0
             elif mac in before and before[mac] != entry.ip:
                 self.store["next_poll"][dev.id] = 0.0
@@ -483,6 +486,43 @@ class Plugin(indigo.PluginBase):
 
     # -- state publishing ---------------------------------------------------
 
+    def _write_state(self, dev, key, value):
+        """Write one state WITHOUT touching the device's error.
+
+        Indigo clears a device's error on every state write unless told not
+        to. This plugin marks a light "offline" or "no address", and only the
+        check that set that verdict may lift it: _publish on a good reply, or
+        _try_to_find_address on finding the controller. Before 1.3.0 a routine
+        write in between (an effect step, the effect name, a moved address)
+        wiped "offline" while the light was still not answering, so Device
+        Health Monitor could see a dead light as healthy.
+        """
+        dev.updateStateOnServer(key, value, clearErrorState=False)
+
+    def _write_states(self, dev, states):
+        """Write a batch of states WITHOUT touching the device's error.
+
+        The official docs show clearErrorState only on the single-state call.
+        The batch form is tried first, because one batch is one SQL Logger row;
+        if Indigo refuses the argument (TypeError) the states go one at a time
+        through the documented form, and that choice is remembered.
+        """
+        keeps = self.store["batch_keeps_error"]
+        if keeps is not False:
+            try:
+                dev.updateStatesOnServer(states, clearErrorState=False)
+                self.store["batch_keeps_error"] = True
+                return
+            except TypeError:
+                if keeps is True:
+                    raise   # it has worked before, so this is a real fault
+                self.store["batch_keeps_error"] = False
+                self.logger.debug("Indigo does not take clearErrorState on a batch "
+                                  "state write, so states go one at a time")
+        for item in states:
+            dev.updateStateOnServer(item["key"], item["value"], clearErrorState=False)
+
+
     def _publish(self, dev, state, controller):
         """Write what the controller said onto the Indigo device.
 
@@ -493,8 +533,8 @@ class Plugin(indigo.PluginBase):
         if state is None:
             if dev.states.get("online", False):
                 self.logger.warning(f"\"{dev.name}\" stopped answering — {controller.last_error}")
-            dev.updateStateOnServer("online", False)
-            dev.updateStateOnServer("mode", "unknown")
+            self._write_state(dev, "online", False)
+            self._write_state(dev, "mode", "unknown")
             dev.setErrorStateOnServer("offline")
             return
 
@@ -554,7 +594,7 @@ class Plugin(indigo.PluginBase):
             if key in dev.states:
                 updates.append({"key": key, "value": to_percent(value)})
 
-        dev.updateStatesOnServer(updates)
+        self._write_states(dev, updates)
 
         if any(state.rgb):
             self.store["hue"][dev.id] = self._normalise_hue(state.rgb)
@@ -586,7 +626,7 @@ class Plugin(indigo.PluginBase):
         if runner is not None and runner.running:
             self.logger.debug(f"Stopping effect {runner.name!r} on \"{dev.name}\" {reason}")
             runner.stop()
-            dev.updateStateOnServer("effect", "none")
+            self._write_state(dev, "effect", "none")
 
     def _start_effect(self, dev, name, steps):
         runner = self.store["effects"].get(dev.id)
@@ -621,13 +661,13 @@ class Plugin(indigo.PluginBase):
                 final = runner.last_step
                 if final is not None:
                     self._publish_step(dev, final)
-                dev.updateStateOnServer("effect", "none")
+                self._write_state(dev, "effect", "none")
                 self.store["next_poll"][dev.id] = 0.0     # re-read on the next tick
             except Exception:
                 self.logger.exception(f"Tidying up after {name} on \"{dev.name}\" failed")
 
         runner.start(name, steps, on_finish=finished, on_step=stepped)
-        dev.updateStateOnServer("effect", name)
+        self._write_state(dev, "effect", name)
         return True
 
     def _publish_step(self, dev, step):
@@ -642,7 +682,7 @@ class Plugin(indigo.PluginBase):
             updates += [{"key": "whiteLevel",      "value": to_percent(step.white)},
                         {"key": "brightnessLevel", "value": to_percent(step.white)}]
         if updates:
-            dev.updateStatesOnServer(updates)
+            self._write_states(dev, updates)
 
     def _current_rgb(self, dev):
         controller = self.store["controllers"].get(dev.id)
@@ -682,7 +722,7 @@ class Plugin(indigo.PluginBase):
             self._stop_effect(dev, "for a manual on")
             if controller.turn_on():
                 self.logger.info(f"sent \"{dev.name}\" on")
-                dev.updateStateOnServer("onOffState", True)
+                self._write_state(dev, "onOffState", True)
                 self.store["next_poll"][dev.id] = 0.0
             else:
                 self.logger.error(f"send \"{dev.name}\" on failed")
@@ -691,7 +731,7 @@ class Plugin(indigo.PluginBase):
             self._stop_effect(dev, "for a manual off")
             if controller.turn_off():
                 self.logger.info(f"sent \"{dev.name}\" off")
-                dev.updateStateOnServer("onOffState", False)
+                self._write_state(dev, "onOffState", False)
                 self.store["next_poll"][dev.id] = 0.0
             else:
                 self.logger.error(f"send \"{dev.name}\" off failed")
@@ -701,7 +741,7 @@ class Plugin(indigo.PluginBase):
             wanted = not dev.onState
             if (controller.turn_on() if wanted else controller.turn_off()):
                 self.logger.info(f"sent \"{dev.name}\" toggle")
-                dev.updateStateOnServer("onOffState", wanted)
+                self._write_state(dev, "onOffState", wanted)
                 self.store["next_poll"][dev.id] = 0.0
             else:
                 self.logger.error(f"send \"{dev.name}\" toggle failed")
@@ -753,8 +793,8 @@ class Plugin(indigo.PluginBase):
         if target <= 0:
             if controller.turn_off():
                 self.logger.info(f"sent \"{dev.name}\" off")
-                dev.updateStatesOnServer([{"key": "onOffState", "value": False},
-                                          {"key": "brightnessLevel", "value": 0}])
+                self._write_states(dev, [{"key": "onOffState", "value": False},
+                                         {"key": "brightnessLevel", "value": 0}])
                 self.store["next_poll"][dev.id] = 0.0
             else:
                 self.logger.error(f"send \"{dev.name}\" off failed")
@@ -778,8 +818,8 @@ class Plugin(indigo.PluginBase):
         if not dev.onState:
             controller.turn_on()
         self.logger.info(f"sent \"{dev.name}\" set brightness to {target}")
-        dev.updateStatesOnServer([{"key": "onOffState", "value": True},
-                                  {"key": "brightnessLevel", "value": target}])
+        self._write_states(dev, [{"key": "onOffState", "value": True},
+                                 {"key": "brightnessLevel", "value": target}])
         self.store["next_poll"][dev.id] = 0.0
 
     def _set_colour_levels(self, dev, action_values):
@@ -1084,7 +1124,7 @@ class Plugin(indigo.PluginBase):
         runner.stop()
         runner.start("demo", plan, on_finish=finished,
                      on_step=lambda step: self._publish_step(dev, step))
-        dev.updateStateOnServer("effect", "demo")
+        self._write_state(dev, "effect", "demo")
         return True
 
     def run_demo(self, valuesDict=None, typeId="", devId=0):
